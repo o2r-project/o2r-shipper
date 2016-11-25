@@ -22,8 +22,9 @@ import os
 import requests
 
 
-def status_note(msg):
-    print(''.join(('[shipper] ', str(msg))))
+def get_user(token):
+    # retrieve user from o2r api
+    pass
 
 
 def create_depot(base, token):
@@ -31,9 +32,11 @@ def create_depot(base, token):
         # create new empty upload depot:
         headers = {"Content-Type": "application/json"}
         r = requests.post(''.join((base, '/deposit/depositions/?access_token=', token)), data='{}', headers=headers)
-        status_note(r.status_code)
-        status_note('created depot <' + str(r.json()['id']) + '>')
-        # deposition_id = r.json()['id']
+        if r.status_code == 201:
+            status_note(str(r.status_code)+' created depot <' + str(r.json()['id']) + '>')
+        else:
+            status_note(r.status_code)
+        #deposition_id = r.json()['id']
         return str(r.json()['id'])
     except:
         raise
@@ -44,25 +47,31 @@ def add_to_depot(base, deposition_id, file_path, token):
         # get bucket url:
         headers = {"Content-Type": "application/json"}
         r = requests.get(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)), headers=headers)
-        status_note(r.status_code)
         bucket_url = r.json()['links']['bucket']
-        status_note('using bucket <' + bucket_url + '>')
+        if r.status_code == 200:
+            status_note(str(r.status_code)+' using bucket <' + bucket_url + '>')
+        else:
+            status_note(r.status_code)
         # upload file into bucket:
         headers = {"Content-Type": "application/octet-stream"}
         stream = open(file_path, 'rb').read()
         r = requests.put("".join((bucket_url, '/', os.path.basename(file_path), '?access_token=', token)), data=stream, headers=headers)
-        status_note(r.status_code)
-        status_note('uploaded file <'+os.path.basename(file_path)+'> to depot <'+deposition_id+'> '+r.json()['checksum'])
+        if r.status_code == 200:
+            status_note(str(r.status_code)+' uploaded file <'+os.path.basename(file_path)+'> to depot <'+deposition_id+'> '+r.json()['checksum'])
+        else:
+            status_note(r.status_code)
     except:
         raise
 
 
 def add_metadata(base, deposition_id, md, token):
     try:
-        status_note('updating metadata at <' + deposition_id + '>')
         headers = {"Content-Type": "application/json"}
         r = requests.put(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)), data=json.dumps(md), headers=headers)
-        status_note(r.status_code)
+        if r.status_code == 200:
+            status_note(str(r.status_code)+' updated metadata at <'+deposition_id+'>')
+        else:
+            status_note(r.status_code)
     except:
         raise
 
@@ -74,10 +83,16 @@ def del_from_depot(base, deposition_id, token):
 def del_depot(base, deposition_id, token):
     try:
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)))
-        status_note(r.status_code)
-        status_note('removed depot ' + '<' + deposition_id + '>')
+        if r.status_code == 204:
+            status_note(str(r.status_code)+' removed depot ' + '<' + deposition_id + '>')
+        else:
+            status_note(r.status_code)
     except:
         raise
+
+
+def status_note(msg):
+    print(''.join(('[shipper] ', str(msg))))
 
 
 # main:
@@ -98,15 +113,24 @@ if __name__ == "__main__":
     meta = args_dict['metadata']
     base_url = args_dict['baseurl']
     test_mode = args_dict['testmode']
-
     if not base_url:
         base_url = 'https://sandbox.zenodo.org/api'
     if not deposition:
-        new_id = create_depot(base_url, access_token)
-        add_to_depot(base_url, new_id, input_filepath, access_token)
-        if test_mode:
-            del_depot(base_url, new_id, access_token)
-    else:
+        # have to build new depot:
+        deposition = create_depot(base_url, access_token)
         add_to_depot(base_url, deposition, input_filepath, access_token)
-        if test_mode:
-            del_depot(base_url, deposition, access_token)
+    else:
+        # will use existing depot:
+        my_depot_id = deposition
+        add_to_depot(base_url, deposition, input_filepath, access_token)
+    if meta:
+        try:
+            # path to file that has the json:
+            with open(os.path.abspath(meta), encoding='utf-8') as meta_file:
+                m = json.load(meta_file)
+            add_metadata(base_url, deposition, m, access_token)
+        except:
+            raise
+    if test_mode:
+        # instant removal to avoid spamming upload folder:
+        del_depot(base_url, deposition, access_token)
