@@ -18,13 +18,23 @@
 import argparse
 import json
 import os
-
+import datetime
 import requests
 
 
-def get_user(token):
+def get_user(ercid):
     # retrieve user from o2r api
-    pass
+    try:
+        status_note('requesting user id...')
+        r = requests.get(''.join((o2r_base, ercid)), timeout=10)
+        return str(r.json()["user"])
+    except requests.exceptions.Timeout:
+        status_note('! error: timeout while fetching user')
+    except requests.exceptions.TooManyRedirects:
+        status_note('! error: too many redirects while fetching user')
+    except requests.exceptions.RequestException as e:
+        status_note(e)
+        return None
 
 
 def create_depot(base, token):
@@ -33,10 +43,9 @@ def create_depot(base, token):
         headers = {"Content-Type": "application/json"}
         r = requests.post(''.join((base, '/deposit/depositions/?access_token=', token)), data='{}', headers=headers)
         if r.status_code == 201:
-            status_note(str(r.status_code)+' created depot <' + str(r.json()['id']) + '>')
+            status_note(''.join((str(r.status_code), ' created depot <',str(r.json()['id']),'>')))
         else:
             status_note(r.status_code)
-        #deposition_id = r.json()['id']
         return str(r.json()['id'])
     except:
         raise
@@ -99,38 +108,68 @@ def status_note(msg):
 if __name__ == "__main__":
     status_note('initializing')
     parser = argparse.ArgumentParser(description='description')
+    # required:
     parser.add_argument('-i', '--inputfilepath', help='input file abs path', required=True)
-    parser.add_argument('-t', '--token', help='accesstoken', required=True)
+    parser.add_argument('-t', '--token', help='access token', required=True)
+    parser.add_argument('-e', '--ercid', help='erc identifier', required=True)
+    # optional:
+    parser.add_argument('-c', '--caller', help='calling user', required=False)
+    parser.add_argument('-r', '--recipient', help='recipient repository, e.g. zenodo', required=False)
     parser.add_argument('-d', '--depositionid', help='deposition id to work with. leave out for new upload depot', required=False)
-    parser.add_argument('-m', '--metadata', help='metadata json to add or modify', required=False)
+    parser.add_argument('-m', '--metadata', help='metadata json file to add or modify', required=False)
     parser.add_argument('-b', '--baseurl', help='api endpoint as url. leave out to use zenodo sandbox', required=False)
     parser.add_argument('-x', '--testmode', help='remove depot immediately after upload, for testing purpose.', action='store_true', required=False)
     args = parser.parse_args()
     args_dict = vars(args)
     input_filepath = args_dict['inputfilepath']
     access_token = args_dict['token']
+    erc_id = args_dict['ercid']
+    caller = args_dict['caller']
     deposition = args_dict['depositionid']
     meta = args_dict['metadata']
-    base_url = args_dict['baseurl']
+    recipient = args_dict['recipient']
+    recipient_base_url = args_dict['baseurl']
     test_mode = args_dict['testmode']
-    if not base_url:
-        base_url = 'https://sandbox.zenodo.org/api'
+    # other inits:
+    o2r_base = 'https://o2r.uni-muenster.de/api/v1/compendium/'
+    answer = {}
+    if not recipient:
+        recipient = 'zenodo'
+    if not recipient_base_url:
+        if recipient.lower() == 'zenodo':
+            recipient_base_url = 'https://sandbox.zenodo.org/api'
+            #recipient_base_url = 'https://zenodo.org/api/'
+    if not caller:
+        if erc_id:
+            caller = get_user(erc_id)
+    # begin transmission:
     if not deposition:
         # have to build new depot:
-        deposition = create_depot(base_url, access_token)
-        add_to_depot(base_url, deposition, input_filepath, access_token)
+        deposition = create_depot(recipient_base_url, access_token)
+        add_to_depot(recipient_base_url, deposition, input_filepath, access_token)
     else:
         # will use existing depot:
         my_depot_id = deposition
-        add_to_depot(base_url, deposition, input_filepath, access_token)
+        add_to_depot(recipient_base_url, deposition, input_filepath, access_token)
     if meta:
         try:
             # path to file that has the json:
             with open(os.path.abspath(meta), encoding='utf-8') as meta_file:
                 m = json.load(meta_file)
-            add_metadata(base_url, deposition, m, access_token)
+            add_metadata(recipient_base_url, deposition, m, access_token)
         except:
             raise
     if test_mode:
         # instant removal to avoid spamming upload folder:
-        del_depot(base_url, deposition, access_token)
+        del_depot(recipient_base_url, deposition, access_token)
+    # output answer json object:
+    shipment_url = ''
+    if recipient == 'zenodo':
+        shipment_url = ''.join((recipient_base_url.replace('api', 'record/'), deposition))
+    answer['compendium_id'] = erc_id
+    answer['recipient'] = recipient
+    answer['deposition_id'] = deposition
+    answer['url'] = shipment_url
+    answer['shipment_date'] = datetime.datetime.today().strftime('%Y-%m-%d')
+    answer['issuer'] = caller
+    print(str(answer))
