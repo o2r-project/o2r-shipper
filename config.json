@@ -1,0 +1,12 @@
+{
+	"o2r_host": "http://localhost:8087/api/v1/",
+	"repository_zenodo_host": "https://sandbox.zenodo.org/api",
+	"mongodb_host": "mongodb://localhost:27017/",
+	"mongodb_db": "o2rtest",
+	"bottle_host": "localhost",
+	"bottle_port": 8087,
+	"session_secret": "o2r",
+	"base_path": "tests",
+	"max_size_mb": 1025,
+	"userlevel_min": 200
+}

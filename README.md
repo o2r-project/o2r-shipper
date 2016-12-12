@@ -14,11 +14,11 @@ o2r-shipper is licensed under Apache License, Version 2.0, see file LICENSE. Cop
 
     pip install -r requirements.txt
 
-or use dockerfiles where applicable.
+or use the Dockerfile.
 
 ---
 
-## 1. Options
+## 1. Options for the shipper service
 
 
 shipper.py is using external API calls to manage file depositions to repository.
@@ -30,14 +30,7 @@ Usage:
     python shipper.py -i INPUT_FILE_PATH -e ERC_ID -t ACCESS_TOKEN [options]
 
 
-+ provide ```-i``` to specify input as absolute path to file
-+ provide ```-e``` to specify o2r ERC identifier
 + provide ```-t``` to specify API access_token
-+ optionally use ```-b``` to specify the API endpoint. Default is `https://sandbox.zenodo.org/api`.
-+ optionally use ```-c``` to specify the calling user. If not provided, shipper will request it based on ERC id.
-+ optionally use ```-d``` to specify the deposition id to work with. Leave out to create a new deposition id.
-+ optionally use ```-m``` to add metadata as json file. If provided, existing metadata will be updated.
-+ optionally use ```-r``` to specify a recipient repository name. Default is `zenodo`.
 + optionally use ```-x``` to enable test mode, where the newly created or specified depot will be deleted after upload.
 
 + use ```docker build``` command with this repository as the context to build the Docker image.
@@ -47,18 +40,30 @@ Example:
     docker build -t o2r-shipper 
     docker run --rm -v $(pwd)/o2r-shipper -i test.zip -e ERC_ID -t TOKEN -x
 
-## 2. Answer
-
-shipper.py return a json object containing information on the submission event:
-
-    {
-    	'compendium_id': 'AAAAA', 
-    	'recipient': 'zenodo', 
-    	'issuer': '0000-0000-0000-0000', 
-    	'url': 'https://sandbox.zenodo.org/record/00000', 
-    	'shipment_date': '2016-11-30', 
-    	'deposition_id': '0000'
-    }
 
 
-Note that the returned record url from Zenodo will only be active after publishing.
+## 2. Endpoint at o2r web API:
+
+Please refer to the documentation available at: 
+
++ [https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md](https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md) 
++ [http://o2r.info/o2r-web-api/shipment/](http://o2r.info/o2r-web-api/shipment/)
+
+
+
+
+## 3. Configuration
+
+Can be done with environment vars and defaults to entries in `config.json` file that must be in the same directory as `shipper.py`.
+
+**ENV VAR** | **config file** | **description**
+------ | ------ | ------
+`SHIPPER_MONGODB` | `mongodb_host` | host for the mongo db
+`SHIPPER_MONGO_NAME` | `mongodb_db` | name of the mongo db
+`SHIPPER_BOTTLE_HOST` | `bottle_host` | host for bottle, the WSGI micro web-framework used with shipper
+`SHIPPER_BOTTLE_PORT` | `bottle_port` | port for bottle
+`SHIPPER_REPO_ZENODO_HOST` | `repository_zenodo_host` | host of zenodo's API
+`SHIPPER_BASE_PATH` | `SHIPPER_BASE_PATH` | base path of target compendium
+`SHIPPER_MAX_DIR_SIZE` | `max_size_mb` | dir size limit for transmission
+`SHIPPER_SECRET` | `session_secret` | session secret
+`SHIPPER_USERLEVEL_MIN` | `userlevel_min` | user level needed to do shipments
