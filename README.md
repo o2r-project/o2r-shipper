@@ -27,10 +27,10 @@ Required packages: ```requests```
 
 Usage:
 
-    python shipper.py -i INPUT_FILE_PATH -e ERC_ID -t ACCESS_TOKEN [options]
+    python shipper.py -t ACCESS_TOKEN
 
 
-+ provide ```-t``` to specify API access_token
++ provide ```-t``` to specify API access_token (zenodo api)
 + optionally use ```-x``` to enable test mode, where the newly created or specified depot will be deleted after upload.
 
 + use ```docker build``` command with this repository as the context to build the Docker image.
@@ -38,7 +38,7 @@ Usage:
 Example:
 
     docker build -t o2r-shipper 
-    docker run --rm -v $(pwd)/o2r-shipper -i test.zip -e ERC_ID -t TOKEN -x
+    docker run --rm -v $(pwd)/o2r-shipper -t ACCESS_TOKEN
 
 
 
