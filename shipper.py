@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """
     Copyright (c) 2016 - o2r project
 
@@ -14,6 +15,7 @@
     limitations under the License.
 
 """
+#pylint: skip-file
 
 import argparse
 import base64
