@@ -31,11 +31,15 @@ import zipfile
 from io import BytesIO
 
 import requests
-from bottle import route, run, request, response
+from bottle import route, run, request, response, hook
 from pymongo import MongoClient
 
 
 # Bottle
+@hook('before_request') # remove trailing slashes
+def strip_path():
+    request.environ['PATH_INFO'] = request.environ['PATH_INFO'].rstrip('/')
+
 @route('/api/v1/shipment', method='GET')
 def shipment_get_all():
     try:
