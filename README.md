@@ -37,16 +37,16 @@ Usage:
 
 Example:
 
-    docker build -t o2r-shipper 
+    docker build -t o2r-shipper
     docker run --rm -v $(pwd)/o2r-shipper -t ACCESS_TOKEN
 
 
 
 ## 2. Endpoint at o2r web API:
 
-Please refer to the documentation available at: 
+Please refer to the documentation available at:
 
-+ [https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md](https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md) 
++ [https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md](https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md)
 + [http://o2r.info/o2r-web-api/shipment/](http://o2r.info/o2r-web-api/shipment/)
 
 
@@ -60,7 +60,7 @@ Can be done with environment vars and defaults to entries in `config.json` file 
 ------ | ------ | ------
 `SHIPPER_MONGODB` | `mongodb_host` | host for the mongo db
 `SHIPPER_MONGO_NAME` | `mongodb_db` | name of the mongo db
-`SHIPPER_BOTTLE_HOST` | `bottle_host` | host for bottle, the WSGI micro web-framework used with shipper
+`SHIPPER_BOTTLE_HOST` | `bottle_host` | host for bottle, the WSGI micro web-framework used with shipper; default is `localhost`, to allows access from other local services running in containers, set this to `0.0.0.0`
 `SHIPPER_BOTTLE_PORT` | `bottle_port` | port for bottle
 `SHIPPER_REPO_ZENODO_HOST` | `repository_zenodo_host` | host of zenodo's API
 `SHIPPER_BASE_PATH` | `SHIPPER_BASE_PATH` | base path of target compendium
