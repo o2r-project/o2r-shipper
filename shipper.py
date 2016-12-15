@@ -29,6 +29,7 @@ import sys
 import uuid
 import zipfile
 from io import BytesIO
+import urllib
 
 import requests
 from bottle import route, run, request, response, hook
@@ -40,6 +41,8 @@ from pymongo import MongoClient
 def strip_path():
     request.environ['PATH_INFO'] = request.environ['PATH_INFO'].rstrip('/')
 
+# TODO add route for shipment/<shipment id>
+# TODO shipment?compendium_id=XXX must return a list of all shipments for the compendium
 @route('/api/v1/shipment', method='GET')
 def shipment_get_all():
     try:
@@ -75,7 +78,8 @@ def shipment_post_new():
     try:
         global env_compendium_files
         # First check if user level is high enough:
-        cookie = request.forms.get('cookie')
+        cookie = request.get_cookie(env_cookie_name)
+        cookie = urllib.parse.unquote(cookie)
         #action = request.forms.get('action') # todo
         user_entitled = session_user_entitled(cookie, env_user_level_min)
         if user_entitled:
@@ -96,28 +100,32 @@ def shipment_post_new():
             db['shipments'].save(data)
             # submit to zenodo:
             if data['recipient'] == 'zenodo':
+                status = 200
                 # todo:
                 # check if action = d and jump to delete depot
                 if not data['deposition_id']:
                     # no depot yet, go create one
-                    current_compendium = db['compendium'].find_one({'id': data['compendium_id']})
+                    current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
                     if current_compendium:
-                        env_compendium_files = os.path.join(env_compendium_files, data['compendium_id'])
-                        if os.path.isdir(env_compendium_files):
+                        compendium_files = os.path.join(env_compendium_files, data['compendium_id'])
+                        if os.path.isdir(compendium_files):
                             file_name = str(data['compendium_id']) + '.zip'
                             data['deposition_id'] = zen_create_depot(env_repository_zenodo_host, arg_access_token)
                             data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'record/'), data['deposition_id']))
-                            zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, env_compendium_files, arg_access_token)
+                            zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, arg_access_token)
                             if 'metadata' in current_compendium:
-                                md = current_compendium['metadata']
-                                zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, arg_access_token)
+                                if 'zenodo' in current_compendium['metadata']:
+                                    md = current_compendium['metadata']['zenodo']
+                                    zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, arg_access_token)
                             data['status'] = 'delivered'
                         else:
-                            status_note('! error, invalid path to compendium: ' + env_compendium_files)
+                            status_note('! error, invalid path to compendium: ' + compendium_files)
+                            data['status'] = 'error'
+                            status = 500
                 db['shipments'].save(data)
-                response.status = 200
+                response.status = status
                 response.content_type = 'application/json'
-                #data.pop('_id', None)  # do not include db id into response
+                
                 d = {}
                 d['id'] = data['id']
                 d['recipient'] = data['recipient']
@@ -166,13 +174,15 @@ def session_get_user(cookie, my_db):
 
 
 def session_user_entitled(cookie, min_lvl):
-    user_orcid = session_get_user(cookie, db)
-    this_user = db['users'].find_one({'orcid': user_orcid})
-    if this_user['level'] >= min_lvl:
-        return this_user['orcid']
+    if cookie:
+        user_orcid = session_get_user(cookie, db)
+        this_user = db['users'].find_one({'orcid': user_orcid})
+        if this_user['level'] >= min_lvl:
+            return this_user['orcid']
+        else:
+            return None
     else:
         return None
-
 
 # Zenodo
 def zen_create_depot(base, token):
@@ -301,6 +311,7 @@ if __name__ == "__main__":
     env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
     env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
     env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', config['userlevel_min'])
+    env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
     env_compendium_files = os.path.join(env_file_base_path, 'compendium')  #config, + compendium_id
     env_user_id = None
     # connect to db
