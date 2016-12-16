@@ -25,11 +25,10 @@ import hmac
 import json
 import os
 import re
-import sys
+import urllib.parse
 import uuid
 import zipfile
 from io import BytesIO
-import urllib
 
 import requests
 from bottle import route, run, request, response, hook
@@ -37,12 +36,26 @@ from pymongo import MongoClient
 
 
 # Bottle
-@hook('before_request') # remove trailing slashes
+@hook('before_request')  # remove trailing slashes
 def strip_path():
     request.environ['PATH_INFO'] = request.environ['PATH_INFO'].rstrip('/')
 
-# TODO add route for shipment/<shipment id>
-# TODO shipment?compendium_id=XXX must return a list of all shipments for the compendium
+
+@route('/api/v1/shipment/<name>', method='GET')
+def shipment_get_one(name):
+    data = db['shipments'].find_one({'id': name})
+    if data is not None:
+        response.status = 200
+        response.content_type = 'application/json'
+        if '_id' in data:
+            data.pop('_id', None)
+        return json.dumps(data)
+    else:
+        response.status = 400
+        response.content_type = 'application/json'
+        return json.dumps({'error': 'not found'})
+
+
 @route('/api/v1/shipment', method='GET')
 def shipment_get_all():
     try:
@@ -53,18 +66,12 @@ def shipment_get_all():
             answer_list.append(key['id'])
         response.status = 200
         response.content_type = 'application/json'
-        if sid:
-            data = db['shipments'].find_one({'id': sid})
-            if '_id' in data:
-                data.pop('_id', None)
-            return json.dumps(data)
         if cid:
-            data = db['shipments'].find_one({'compendium_id': cid})
-            if '_id' in data:
-                data.pop('_id', None)
-            return json.dumps(data)
-        if not sid and not cid:
-            return json.dumps({'shipments': answer_list})
+            # TODO shipment?compendium_id=XXX must return a list of all shipments for the compendium
+            answer_list = []
+            for key in db['shipments'].find({'compendium_id': cid}):
+                answer_list.append(key['id'])
+        return json.dumps(answer_list)
     except:
         response.status = 400
         response.content_type = 'application/json'
@@ -78,6 +85,7 @@ def shipment_post_new():
         # First check if user level is high enough:
         cookie = request.get_cookie(env_cookie_name)
         cookie = urllib.parse.unquote(cookie)
+        ###cookie = request.forms.get('cookie')  # for testing only
         #action = request.forms.get('action') # todo
         user_entitled = session_user_entitled(cookie, env_user_level_min)
         if user_entitled:
@@ -284,18 +292,12 @@ def status_note(msg):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='shipper arguments')
     # args required:
-    parser.add_argument('-t', '--token', help='access token', required=True)
     # args optional:
+    parser.add_argument('-t', '--token', help='access token', required=False)
     parser.add_argument('-x', '--testmode', help='remove depot immediately after upload, for testing purpose.', action='store_true', required=False)
     # args parsed:
-    try:
-        args = vars(parser.parse_args())
-        arg_access_token = args['token']
-        # list of tokens necessary once we have more repos to serve
-        arg_test_mode = args['testmode']
-    except SystemExit:
-        status_note('! error, missing arguments')
-        sys.exit(1)
+    args = vars(parser.parse_args())
+    arg_test_mode = args['testmode']
     status_note(base64.b64decode('bGF1bmNoaW5nDQouLS0tLS0tLS0tLS0tLS0uDQp8ICAgICBfLl8gIF8gICAgYC4sX19fX19fDQp8ICAgIChvMnIoKF8oICAgICAgX19fKF8oKQ0KfCAgXCctLTotLS06LS4gICAsJw0KJy0tLS0tLS0tLS0tLS0tJ8K0DQo=').decode('utf-8'))
     # environment vars and defaults
     with open('config.json') as data_file:
@@ -305,6 +307,10 @@ if __name__ == "__main__":
     env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
     env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
     env_repository_zenodo_host = os.environ.get('SHIPPER_REPO_ZENODO_HOST', config['repository_zenodo_host'])
+    if 'token' not in args:
+        env_repository_zenodo_token = os.environ.get('SHIPPER_REPO_ZENODO_TOKEN', config['env_repository_zenodo_token'])
+    else:
+        env_repository_zenodo_token = args['token']
     env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
     env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
     env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])

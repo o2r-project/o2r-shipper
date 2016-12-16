@@ -1,6 +1,7 @@
 {
 	"o2r_host": "http://localhost:8087/api/v1/",
 	"repository_zenodo_host": "https://sandbox.zenodo.org/api",
+	"repository_zenodo_token": "",
 	"mongodb_host": "mongodb://localhost:27017/",
 	"mongodb_db": "muncher",
 	"bottle_host": "localhost",
