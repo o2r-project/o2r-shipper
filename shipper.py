@@ -116,13 +116,13 @@ def shipment_post_new():
                         compendium_files = os.path.join(env_compendium_files, data['compendium_id'])
                         if os.path.isdir(compendium_files):
                             file_name = str(data['compendium_id']) + '.zip'
-                            data['deposition_id'] = zen_create_depot(env_repository_zenodo_host, arg_access_token)
+                            data['deposition_id'] = zen_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
                             data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'record/'), data['deposition_id']))
-                            zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, arg_access_token)
+                            zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
                             if 'metadata' in current_compendium:
                                 if 'zenodo' in current_compendium['metadata']:
                                     md = current_compendium['metadata']['zenodo']
-                                    zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, arg_access_token)
+                                    zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, env_repository_zenodo_token)
                             data['status'] = 'delivered'
                         else:
                             status_note('! error, invalid path to compendium: ' + compendium_files)
@@ -307,8 +307,8 @@ if __name__ == "__main__":
     env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
     env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
     env_repository_zenodo_host = os.environ.get('SHIPPER_REPO_ZENODO_HOST', config['repository_zenodo_host'])
-    if 'token' not in args:
-        env_repository_zenodo_token = os.environ.get('SHIPPER_REPO_ZENODO_TOKEN', config['env_repository_zenodo_token'])
+    if args['token'] is None:
+        env_repository_zenodo_token = os.environ.get('SHIPPER_REPO_ZENODO_TOKEN', config['repository_zenodo_token'])
     else:
         env_repository_zenodo_token = args['token']
     env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
