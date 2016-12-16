@@ -55,12 +55,12 @@ def shipment_get_all():
         response.content_type = 'application/json'
         if sid:
             data = db['shipments'].find_one({'id': sid})
-            if data['_id']:
+            if '_id' in data:
                 data.pop('_id', None)
             return json.dumps(data)
         if cid:
             data = db['shipments'].find_one({'compendium_id': cid})
-            if data['_id']:
+            if '_id' in data:
                 data.pop('_id', None)
             return json.dumps(data)
         if not sid and not cid:
@@ -69,8 +69,6 @@ def shipment_get_all():
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
-
-
 
 
 @route('/api/v1/shipment', method='POST')
@@ -315,7 +313,7 @@ if __name__ == "__main__":
     env_compendium_files = os.path.join(env_file_base_path, 'compendium')  #config, + compendium_id
     env_user_id = None
     # connect to db
-    client = MongoClient(config['mongodb_host'])
+    client = MongoClient(env_mongo_host)
     db = client[env_mongo_db_name]
     # start bottle server
     run(host=env_bottle_host, port=env_bottle_port)
