@@ -38,7 +38,10 @@ from pymongo import MongoClient
 # Bottle
 @hook('before_request')  # remove trailing slashes
 def strip_path():
-    request.environ['PATH_INFO'] = request.environ['PATH_INFO'].rstrip('/')
+    try:
+        request.environ['PATH_INFO'] = request.environ['PATH_INFO'].rstrip('/')
+    except Exception as exc:
+        status_note(''.join(('! error: ', exc.args[0])))
 
 
 @route('/api/v1/shipment/<name>', method='GET')
@@ -150,19 +153,23 @@ def shipment_post_new():
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
-    except:
-        raise
+    except Exception as exc:
+        #raise
+        status_note(''.join(('! error: ', exc.args[0])))
 
 
 # Session
 def session_get_cookie(val, secret):
-    # Create session cookie string for session ID.
-    signature = hmac.new(str.encode(secret), msg=str.encode(val), digestmod=hashlib.sha256).digest()
-    signature_enc = base64.b64encode(signature)
-    cookie = ''.join(('s:', val, '.', signature_enc.decode()))
-    cookie = re.sub(r'\=+$', '', cookie)  # remove trailing = characters
-    return cookie
-
+    try:
+        # Create session cookie string for session ID.
+        signature = hmac.new(str.encode(secret), msg=str.encode(val), digestmod=hashlib.sha256).digest()
+        signature_enc = base64.b64encode(signature)
+        cookie = ''.join(('s:', val, '.', signature_enc.decode()))
+        cookie = re.sub(r'\=+$', '', cookie)  # remove trailing = characters
+        return cookie
+    except Exception as exc:
+        #raise
+        status_note(''.join(('! error: ', exc.args[0])))
 
 def session_get_user(cookie, my_db):
     session_id = cookie.split('.')[0].split('s:')[1]
@@ -173,8 +180,9 @@ def session_get_user(cookie, my_db):
             session_user = session['session']['passport']['user']
             user_doc = my_db['users'].find_one({'orcid': session_user})
             return user_doc['orcid']
-        except:
-            raise
+        except Exception as exc:
+            # raise
+            status_note(''.join(('! error: ', exc.args[0])))
     else:
         return None
 
@@ -201,8 +209,11 @@ def zen_create_depot(base, token):
         else:
             status_note(r.status_code)
         return str(r.json()['id'])
-    except:
-        raise
+    except requests.exceptions.Timeout:
+        status_note('server at <'+base+'> timed out')
+    except Exception as exc:
+        # raise
+        status_note(''.join(('! error: ', exc.args[0])))
 
 
 def zen_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
@@ -236,8 +247,9 @@ def zen_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
                 status_note(r.status_code)
         else:
             status_note("! error: file not found")
-    except:
-        raise
+    except Exception as exc:
+        # raise
+        status_note(''.join(('! error: ', exc.args[0])))
 
 
 def zen_add_metadata(base, deposition_id, md, token):
@@ -248,8 +260,9 @@ def zen_add_metadata(base, deposition_id, md, token):
             status_note(str(r.status_code) + ' updated metadata at <'+deposition_id+'>')
         else:
             status_note(r.status_code)
-    except:
-        raise
+    except Exception as exc:
+        # raise
+        status_note(''.join(('! error: ', exc.args[0])))
 
 
 def zen_del_from_depot(base, deposition_id, token):
@@ -263,8 +276,9 @@ def zen_del_depot(base, deposition_id, token):
             status_note(''.join((str(r.status_code), ' removed depot <', deposition_id, '>')))
         else:
             status_note(r.status_code)
-    except:
-        raise
+    except Exception as exc:
+        # raise
+        status_note(''.join(('! error: ', exc.args[0])))
 
 
 # File interaction
