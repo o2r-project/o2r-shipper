@@ -25,14 +25,16 @@ import hmac
 import json
 import os
 import re
+import time
 import urllib.parse
 import uuid
 import zipfile
+
 from io import BytesIO
 
 import requests
-from bottle import route, run, request, response, hook
-from pymongo import MongoClient
+from bottle import *
+from pymongo import MongoClient, errors
 
 
 # Bottle
@@ -198,6 +200,7 @@ def session_user_entitled(cookie, min_lvl):
     else:
         return None
 
+
 # Zenodo
 def zen_create_depot(base, token):
     try:
@@ -304,6 +307,13 @@ def status_note(msg):
 
 # Main
 if __name__ == "__main__":
+    my_version = 1
+    my_mod = ''
+    try:
+        my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
+    except OSError:
+        pass
+    status_note(''.join(('v', str(my_version), ' - ', str(my_mod))))
     parser = argparse.ArgumentParser(description='shipper arguments')
     # args required:
     # args optional:
@@ -312,7 +322,6 @@ if __name__ == "__main__":
     # args parsed:
     args = vars(parser.parse_args())
     arg_test_mode = args['testmode']
-    status_note(base64.b64decode('bGF1bmNoaW5nDQouLS0tLS0tLS0tLS0tLS0uDQp8ICAgICBfLl8gIF8gICAgYC4sX19fX19fDQp8ICAgIChvMnIoKF8oICAgICAgX19fKF8oKQ0KfCAgXCctLTotLS06LS4gICAsJw0KJy0tLS0tLS0tLS0tLS0tJ8K0DQo=').decode('utf-8'))
     # environment vars and defaults
     with open('config.json') as data_file:
         config = json.load(data_file)
@@ -332,8 +341,21 @@ if __name__ == "__main__":
     env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
     env_compendium_files = os.path.join(env_file_base_path, 'compendium')  #config, + compendium_id
     env_user_id = None
-    # connect to db
-    client = MongoClient(env_mongo_host)
-    db = client[env_mongo_db_name]
-    # start bottle server
-    run(host=env_bottle_host, port=env_bottle_port)
+    try:
+        # connect to db
+        client = MongoClient(env_mongo_host, serverSelectionTimeoutMS=12000)
+        db = client[env_mongo_db_name]
+        status_note('connecting to ' + str(env_mongo_host))
+        status_note('connected. MongoDB server version: ' + str(client.server_info()['version']))
+        try:
+            # start bottle server
+            status_note(base64.b64decode('bGF1bmNoaW5nDQouLS0tLS0tLS0tLS0tLS0uDQp8ICAgICBfLl8gIF8gICAgYC4sX19fX19fDQp8ICAgIChvMnIoKF8oICAgICAgX19fKF8oKQ0KfCAgXCctLTotLS06LS4gICAsJw0KJy0tLS0tLS0tLS0tLS0tJ8K0DQo=').decode('utf-8'))
+            time.sleep(0.2)
+            run(host=env_bottle_host, port=env_bottle_port)
+        except Exception as exc:
+            status_note('! error: bottle server: ' + str(exc))
+    except errors.ServerSelectionTimeoutError as exc2:
+        status_note('! error: mongodb timeout error: ' + str(exc2))
+    except Exception as exc:
+        status_note('! error: mongodb connection error: ' + str(exc))
+
