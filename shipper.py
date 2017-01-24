@@ -19,7 +19,7 @@
 
 import argparse
 import base64
-import datetime
+from datetime import datetime
 import hashlib
 import hmac
 import json
@@ -29,6 +29,7 @@ import time
 import urllib.parse
 import uuid
 import zipfile
+import traceback
 
 from io import BytesIO
 
@@ -89,10 +90,18 @@ def shipment_post_new():
         global env_compendium_files
         # First check if user level is high enough:
         cookie = request.get_cookie(env_cookie_name)
+        if cookie is None:
+            status_note(''.join(('cookie "', env_cookie_name, '" cannot be found!')))
+            response.status = 400
+            response.content_type = 'application/json'
+            return json.dumps({'error': 'bad request: authentication cookie is missing'})
+
         cookie = urllib.parse.unquote(cookie)
         ###cookie = request.forms.get('cookie')  # for testing only
         #action = request.forms.get('action') # todo
         user_entitled = session_user_entitled(cookie, env_user_level_min)
+        status_note(''.join(('validating session with cookie "', cookie, '" and minimum level ', str(env_user_level_min), '. found user "', str(user_entitled), '"')))
+
         if user_entitled:
             # get shipment id
             new_id = request.forms.get('_id')
@@ -105,7 +114,7 @@ def shipment_post_new():
             data['deposition_id'] = request.forms.get('deposition_id')
             data['deposition_url'] = request.forms.get('deposition_url')
             data['recipient'] = request.forms.get('recipient')
-            data['last_modified'] = str(datetime.datetime.utcnow())
+            data['last_modified'] = str(datetime.now())
             data['user'] = user_entitled
             data['status'] = 'new'
             db['shipments'].save(data)
@@ -128,18 +137,22 @@ def shipment_post_new():
                                 if 'zenodo' in current_compendium['metadata']:
                                     md = current_compendium['metadata']['zenodo']
                                     zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, env_repository_zenodo_token)
-                            data['status'] = 'delivered'
+                            data['status'] = 'deposited'
                         else:
                             status_note('! error, invalid path to compendium: ' + compendium_files)
                             data['status'] = 'error'
                             status = 500
+
+                # save shipment to database            
                 db['shipments'].save(data)
+
+                # build and send response
                 response.status = status
                 response.content_type = 'application/json'
-                
                 d = {}
                 d['id'] = data['id']
                 d['recipient'] = data['recipient']
+                d['status'] = data['status']
                 return json.dumps(d)
             else:
                 # not zenodo (currently no others supported)
@@ -151,13 +164,17 @@ def shipment_post_new():
             response.content_type = 'application/json'
             return json.dumps({'error': 'insufficient permissions'})
     except requests.exceptions.RequestException as exc:
-        status_note(exc)
+        status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
     except Exception as exc:
         #raise
-        status_note(''.join(('! error: ', exc.args[0])))
+        status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
+        message = ''.join('bad request:', exc.args[0])
+        response.status = 500
+        response.content_type = 'application/json'
+        return json.dumps({'error': message})
 
 
 # Session
