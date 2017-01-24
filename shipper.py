@@ -136,7 +136,7 @@ def shipment_post_new():
                         if os.path.isdir(compendium_files):
                             file_name = str(data['compendium_id']) + '.zip'
                             data['deposition_id'] = zen_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
-                            data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'record/'), data['deposition_id']))
+                            data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'deposit/'), data['deposition_id']))
                             zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
                             if 'metadata' in current_compendium:
                                 if 'zenodo' in current_compendium['metadata']:
