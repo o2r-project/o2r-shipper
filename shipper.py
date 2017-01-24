@@ -167,7 +167,7 @@ def shipment_post_new():
         else:
             response.status = 403
             response.content_type = 'application/json'
-            return json.dumps({'error': 'insufficient permissions'})
+            return json.dumps({'error': 'insufficient permissions (not logged in?)'})
     except requests.exceptions.RequestException as exc:
         status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
         response.status = 400
@@ -197,6 +197,10 @@ def session_get_cookie(val, secret):
 
 def session_get_user(cookie, my_db):
     session_id = cookie.split('.')[0].split('s:')[1]
+    if not session_id:
+        status_note(''.join(('no session found for cookie "', cookie, '"')))
+        return None
+
     if hmac.compare_digest(cookie, session_get_cookie(session_id, env_session_secret)):
         sessions = my_db['sessions']
         try:
@@ -214,9 +218,18 @@ def session_get_user(cookie, my_db):
 def session_user_entitled(cookie, min_lvl):
     if cookie:
         user_orcid = session_get_user(cookie, db)
+        if not user_orcid:
+            status_note(''.join(('No orcid found for cookie "', xstr(cookie))))
+            return None
+
         this_user = db['users'].find_one({'orcid': user_orcid})
-        if this_user['level'] >= min_lvl:
-            return this_user['orcid']
+        status_note(''.join(('found user "', xstr(this_user), '" for orcid ', user_orcid)))
+
+        if this_user:
+            if this_user['level'] >= min_lvl:
+                return this_user['orcid']
+            else:
+                return None
         else:
             return None
     else:
@@ -325,6 +338,11 @@ def files_dir_size(my_path):
 # Self
 def status_note(msg):
     print(''.join(('[shipper] ', str(msg))))
+
+
+def xstr(s):
+    return '' if s is None else str(s)
+
 
 # Main
 if __name__ == "__main__":
