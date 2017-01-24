@@ -49,8 +49,8 @@ Configuration is based on environment variables as shown in the table below. The
 
 **ENV VAR** | **config file** | **description**
 ------ | ------ | ------
-`SHIPPER_MONGODB` | `mongodb_host` | host for the mongo db
-`SHIPPER_MONGO_NAME` | `mongodb_db` | name of the mongo db
+`SHIPPER_MONGODB` | `mongodb_host` | MongoDB connection string, including protocol, host, host and port, default is `mongodb://localhost:27017/`
+`SHIPPER_MONGO_NAME` | `mongodb_db` | name of the MongoDB
 `SHIPPER_BOTTLE_HOST` | `bottle_host` | host for bottle, the WSGI micro web-framework used with shipper; default is `localhost`, to allows access from other local services running in containers, set this to `0.0.0.0`
 `SHIPPER_BOTTLE_PORT` | `bottle_port` | port for bottle
 `SHIPPER_REPO_ZENODO_HOST` | `repository_zenodo_host` | host of Zenodo's API, defaults to _Zenodo Sandbox_
