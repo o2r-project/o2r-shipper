@@ -37,9 +37,13 @@ import requests
 from bottle import *
 from pymongo import MongoClient, errors
 
+from requestlogger import WSGILogger, ApacheFormatter
+import logging
 
 # Bottle
-@hook('before_request')  # remove trailing slashes
+app = Bottle()
+
+@app.hook('before_request')  # remove trailing slashes
 def strip_path():
     try:
         request.environ['PATH_INFO'] = request.environ['PATH_INFO'].rstrip('/')
@@ -47,7 +51,7 @@ def strip_path():
         status_note(''.join(('! error: ', exc.args[0])))
 
 
-@route('/api/v1/shipment/<name>', method='GET')
+@app.route('/api/v1/shipment/<name>', method='GET')
 def shipment_get_one(name):
     data = db['shipments'].find_one({'id': name})
     if data is not None:
@@ -57,12 +61,13 @@ def shipment_get_one(name):
             data.pop('_id', None)
         return json.dumps(data)
     else:
+        status_note(''.join(('user requested non-existing shipment ', name)))
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'not found'})
 
 
-@route('/api/v1/shipment', method='GET')
+@app.route('/api/v1/shipment', method='GET')
 def shipment_get_all():
     try:
         sid = request.query.id
@@ -84,7 +89,7 @@ def shipment_get_all():
         return json.dumps({'error': 'bad request'})
 
 
-@route('/api/v1/shipment', method='POST')
+@app.route('/api/v1/shipment', method='POST')
 def shipment_post_new():
     try:
         global env_compendium_files
@@ -321,15 +326,17 @@ def files_dir_size(my_path):
 def status_note(msg):
     print(''.join(('[shipper] ', str(msg))))
 
-
 # Main
 if __name__ == "__main__":
+    status_note('starting ...')
     my_version = 1
     my_mod = ''
     try:
         my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
-    except OSError:
-        pass
+    except OSError as exc:
+        status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
+        sys.exit(1)
+
     status_note(''.join(('v', str(my_version), ' - ', str(my_mod))))
     parser = argparse.ArgumentParser(description='shipper arguments')
     # args required:
@@ -339,6 +346,8 @@ if __name__ == "__main__":
     # args parsed:
     args = vars(parser.parse_args())
     arg_test_mode = args['testmode']
+    status_note(''.join(('args: ', str(args))))
+
     # environment vars and defaults
     with open('config.json') as data_file:
         config = json.load(data_file)
@@ -358,21 +367,30 @@ if __name__ == "__main__":
     env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
     env_compendium_files = os.path.join(env_file_base_path, 'compendium')  #config, + compendium_id
     env_user_id = None
+    status_note(''.join(('loaded config and env:', '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name, '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port))))
+
+    # connect to db
     try:
-        # connect to db
+        status_note('connecting to ' + str(env_mongo_host))
         client = MongoClient(env_mongo_host, serverSelectionTimeoutMS=12000)
         db = client[env_mongo_db_name]
-        status_note('connecting to ' + str(env_mongo_host))
         status_note('connected. MongoDB server version: ' + str(client.server_info()['version']))
-        try:
-            # start bottle server
-            status_note(base64.b64decode('bGF1bmNoaW5nDQouLS0tLS0tLS0tLS0tLS0uDQp8ICAgICBfLl8gIF8gICAgYC4sX19fX19fDQp8ICAgIChvMnIoKF8oICAgICAgX19fKF8oKQ0KfCAgXCctLTotLS06LS4gICAsJw0KJy0tLS0tLS0tLS0tLS0tJ8K0DQo=').decode('utf-8'))
-            time.sleep(0.2)
-            run(host=env_bottle_host, port=env_bottle_port)
-        except Exception as exc:
-            status_note('! error: bottle server: ' + str(exc))
-    except errors.ServerSelectionTimeoutError as exc2:
-        status_note('! error: mongodb timeout error: ' + str(exc2))
+    except errors.ServerSelectionTimeoutError as exc:
+        status_note('! error: mongodb timeout error: ' + str(exc))
+        sys.exit(1)
     except Exception as exc:
         status_note('! error: mongodb connection error: ' + str(exc))
+        print(traceback.format_exc())
+        sys.exit(1)
+    
+    # start service
+    try:
+        status_note(''.join(('starting bottle at ' + env_bottle_host + ':' + str(env_bottle_port), '...')))
+        status_note(base64.b64decode('bGF1bmNoaW5nDQouLS0tLS0tLS0tLS0tLS0uDQp8ICAgICBfLl8gIF8gICAgYC4sX19fX19fDQp8ICAgIChvMnIoKF8oICAgICAgX19fKF8oKQ0KfCAgXCctLTotLS06LS4gICAsJw0KJy0tLS0tLS0tLS0tLS0tJ8#K0DQo=').decode('utf-8'))
+        time.sleep(0.1)
+        app = WSGILogger(app, [ logging.StreamHandler(sys.stdout) ], ApacheFormatter())
+        run(app=app, host=env_bottle_host, port=env_bottle_port, debug=True)
+    except Exception as exc:
+        status_note('! error: bottle server could not be started: ' + traceback.format_exc())
+        sys.exit(1)
 
