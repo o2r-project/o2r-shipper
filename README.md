@@ -1,4 +1,3 @@
-
 # o2r-shipper
 
 This is a micro service for the transmission of ERCs to external repositories.
@@ -8,7 +7,6 @@ For its role within o2r, please see [o2r-architecture](https://github.com/o2r-pr
 ## License
 
 o2r-shipper is licensed under Apache License, Version 2.0, see file LICENSE. Copyright (C) 2016 - o2r project.
-
 
 ## Installation
 
@@ -20,7 +18,6 @@ or use the Dockerfile.
 
 ## 1. Options for the shipper service
 
-
 shipper.py is using external API calls to manage file depositions to repositories while contributing shipment api routes for the o2r web api.
 
 Required packages: ```requests```, ```bottle```, ```pymongo```
@@ -28,7 +25,6 @@ Required packages: ```requests```, ```bottle```, ```pymongo```
 Usage:
 
     python shipper.py -t ACCESS_TOKEN
-
 
 + optionally use ```-t``` to specify API access_token (zenodo api). This will be prefered if there is a token available through configuration (s. below).
 + optionally use ```-x``` to enable test mode, where the newly created or specified depot will be deleted after upload.
@@ -40,8 +36,6 @@ Example:
     docker build -t o2r-shipper
     docker run --rm -v $(pwd)/o2r-shipper -t ACCESS_TOKEN
 
-
-
 ## 2. Endpoint at o2r web API:
 
 Please refer to the documentation available at:
@@ -49,12 +43,9 @@ Please refer to the documentation available at:
 + [https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md](https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md)
 + [http://o2r.info/o2r-web-api/shipment/](http://o2r.info/o2r-web-api/shipment/)
 
-
-
-
 ## 3. Configuration
 
-Can be done with environment vars and defaults to entries in `config.json` file that must be in the same directory as `shipper.py`.
+Configuration is based on environment variables as shown in the table below. The defaults are entries in the `config.json` file, which must be in the same directory as `shipper.py`, and can also be changed in that file.
 
 **ENV VAR** | **config file** | **description**
 ------ | ------ | ------
