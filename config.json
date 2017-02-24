@@ -7,7 +7,7 @@
 	"bottle_host": "localhost",
 	"bottle_port": 8087,
 	"session_secret": "o2r",
-	"base_path": "/tmp/o2r",
+	"base_path": "tmp/o2r",
 	"max_size_mb": 1025,
 	"userlevel_min": 200,
 	"cookie_name": "connect.sid"

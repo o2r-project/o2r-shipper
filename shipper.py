@@ -15,30 +15,27 @@
     limitations under the License.
 
 """
-#pylint: skip-file
 
 import argparse
 import base64
-from datetime import datetime
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import time
+import traceback
 import urllib.parse
 import uuid
 import zipfile
-import traceback
-
+from datetime import datetime
 from io import BytesIO
 
 import requests
 from bottle import *
 from pymongo import MongoClient, errors
-
 from requestlogger import WSGILogger, ApacheFormatter
-import logging
 
 # Bottle
 app = Bottle()
@@ -94,19 +91,20 @@ def shipment_post_new():
     try:
         global env_compendium_files
         # First check if user level is high enough:
-        cookie = request.get_cookie(env_cookie_name)
+        try:
+            # prefer this if provided via request (for non-browser use and testing)
+            cookie = request.forms.get('cookie')
+        except:
+            cookie = request.get_cookie(env_cookie_name)
         if cookie is None:
             status_note(''.join(('cookie "', env_cookie_name, '" cannot be found!')))
             response.status = 400
             response.content_type = 'application/json'
             return json.dumps({'error': 'bad request: authentication cookie is missing'})
-
         cookie = urllib.parse.unquote(cookie)
-        ###cookie = request.forms.get('cookie')  # for testing only
         #action = request.forms.get('action') # todo
         user_entitled = session_user_entitled(cookie, env_user_level_min)
         status_note(''.join(('validating session with cookie "', cookie, '" and minimum level ', str(env_user_level_min), '. found user "', str(user_entitled), '"')))
-
         if user_entitled:
             # get shipment id
             new_id = request.forms.get('_id')
@@ -141,16 +139,16 @@ def shipment_post_new():
                             if 'metadata' in current_compendium:
                                 if 'zenodo' in current_compendium['metadata']:
                                     md = current_compendium['metadata']['zenodo']
+                                    status_note('######123')
+                                    status_note(str(md))
                                     zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, env_repository_zenodo_token)
                             data['status'] = 'deposited'
                         else:
                             status_note('! error, invalid path to compendium: ' + compendium_files)
                             data['status'] = 'error'
                             status = 500
-
                 # save shipment to database            
                 db['shipments'].save(data)
-
                 # build and send response
                 response.status = status
                 response.content_type = 'application/json'
@@ -169,12 +167,13 @@ def shipment_post_new():
             response.content_type = 'application/json'
             return json.dumps({'error': 'insufficient permissions (not logged in?)'})
     except requests.exceptions.RequestException as exc:
+        raise
         status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
     except Exception as exc:
-        #raise
+        raise
         status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
         message = ''.join('bad request:', exc.args[0])
         response.status = 500
@@ -195,12 +194,12 @@ def session_get_cookie(val, secret):
         #raise
         status_note(''.join(('! error: ', exc.args[0])))
 
+
 def session_get_user(cookie, my_db):
     session_id = cookie.split('.')[0].split('s:')[1]
     if not session_id:
         status_note(''.join(('no session found for cookie "', cookie, '"')))
         return None
-
     if hmac.compare_digest(cookie, session_get_cookie(session_id, env_session_secret)):
         sessions = my_db['sessions']
         try:
@@ -221,10 +220,8 @@ def session_user_entitled(cookie, min_lvl):
         if not user_orcid:
             status_note(''.join(('No orcid found for cookie "', xstr(cookie))))
             return None
-
         this_user = db['users'].find_one({'orcid': user_orcid})
         status_note(''.join(('found user "', xstr(this_user), '" for orcid ', user_orcid)))
-
         if this_user:
             if this_user['level'] >= min_lvl:
                 return this_user['orcid']
@@ -292,14 +289,24 @@ def zen_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
 
 def zen_add_metadata(base, deposition_id, md, token):
     try:
+        ## official test md:
+        ##md = {"metadata": {"title": "My first upload", "upload_type": "poster", "description": "This is my first upload", "creators": [{"name": "Doe, John", "affiliation": "Zenodo"}]}}
+        status_note('-----------<MD>--------------/')
+        status_note(md)
         headers = {"Content-Type": "application/json"}
-        r = requests.put(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)), data=json.dumps(md), headers=headers)
+        r = requests.put(''.join((base, '/deposit/depositions/', str(deposition_id), '?access_token=', token)), data=json.dumps(md), headers=headers)
         if r.status_code == 200:
-            status_note(str(r.status_code) + ' updated metadata at <'+deposition_id+'>')
+            status_note(str(r.status_code) + ' updated metadata at <' + str(deposition_id) + '>')
+        elif r.status_code == 400:
+            status_note(str(r.status_code) + ' ! failed to update metadata at <' + str(deposition_id) + '>. Possibly missing required elements or malformed MD-object.')
+            status_note(str(r.text))
+        elif r.status_code == 404:
+            status_note(str(r.status_code) + ' ! failed to update metadata at <' + str(deposition_id) + '>. URL path not found.')
         else:
-            status_note(r.status_code)
+            status_note(str(r.status_code))
+            status_note(str(r.text))
     except Exception as exc:
-        # raise
+        raise
         status_note(''.join(('! error: ', exc.args[0])))
 
 
@@ -347,7 +354,7 @@ def xstr(s):
 # Main
 if __name__ == "__main__":
     status_note('starting ...')
-    my_version = 1
+    my_version = 2
     my_mod = ''
     try:
         my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
@@ -367,26 +374,28 @@ if __name__ == "__main__":
     status_note(''.join(('args: ', str(args))))
 
     # environment vars and defaults
-    with open('config.json') as data_file:
-        config = json.load(data_file)
-    env_mongo_host = os.environ.get('SHIPPER_MONGODB', config['mongodb_host'])
-    env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', config['mongodb_db'])
-    env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
-    env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
-    env_repository_zenodo_host = os.environ.get('SHIPPER_REPO_ZENODO_HOST', config['repository_zenodo_host'])
-    if args['token'] is None:
-        env_repository_zenodo_token = os.environ.get('SHIPPER_REPO_ZENODO_TOKEN', config['repository_zenodo_token'])
-    else:
-        env_repository_zenodo_token = args['token']
-    env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
-    env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
-    env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
-    env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', config['userlevel_min'])
-    env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
-    env_compendium_files = os.path.join(env_file_base_path, 'compendium')  #config, + compendium_id
-    env_user_id = None
-    status_note(''.join(('loaded config and env:', '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name, '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port))))
-
+    try:
+        with open('config.json') as data_file:
+            config = json.load(data_file)
+        env_mongo_host = os.environ.get('SHIPPER_MONGODB', config['mongodb_host'])
+        env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', config['mongodb_db'])
+        env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
+        env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
+        env_repository_zenodo_host = os.environ.get('SHIPPER_REPO_ZENODO_HOST', config['repository_zenodo_host'])
+        if args['token'] is None:
+            env_repository_zenodo_token = os.environ.get('SHIPPER_REPO_ZENODO_TOKEN', config['repository_zenodo_token'])
+        else:
+            env_repository_zenodo_token = args['token']
+        env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
+        env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
+        env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
+        env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', config['userlevel_min'])
+        env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
+        env_compendium_files = os.path.join(env_file_base_path, 'compendium')  #config, + compendium_id
+        env_user_id = None
+        status_note(''.join(('loaded config and env:', '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name, '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port))))
+    except:
+        raise
     # connect to db
     try:
         status_note('connecting to ' + str(env_mongo_host))
