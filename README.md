@@ -20,14 +20,14 @@ or use the Dockerfile.
 
 shipper.py is using external API calls to manage file depositions to repositories while contributing shipment api routes for the o2r web api.
 
-Required packages: ```requests```, ```bottle```, ```pymongo```
+Required packages: ```requests```, ```bottle```, ```pymongo```, ```wsgi-request-logger```
 
 Usage:
 
     python shipper.py -t ACCESS_TOKEN
 
 + optionally use ```-t``` to specify API access_token (Zenodo API). This will be prefered if there is a token available through configuration (s. below).
-+ optionally use ```-x``` to enable test mode, where the newly created or specified depot will be deleted after upload.
++ ~~optionally use ```-x``` to enable test mode, where the newly created or specified depot will be deleted after upload.~~ _currently unavailable_
 
 + use ```docker build``` command with this repository as the context to build the Docker image.
 
@@ -55,7 +55,7 @@ Configuration is based on environment variables as shown in the table below. The
 `SHIPPER_BOTTLE_PORT` | `bottle_port` | port for bottle
 `SHIPPER_REPO_ZENODO_HOST` | `repository_zenodo_host` | host of Zenodo's API, defaults to _Zenodo Sandbox_
 `SHIPPER_REPO_ZENODO_TOKEN` | `repository_zenodo_token` | API token for zenodo
-`SHIPPER_BASE_PATH` | `SHIPPER_BASE_PATH` | base path of target compendium
+`SHIPPER_BASE_PATH` | `base_path` | base path of target compendium
 `SHIPPER_MAX_DIR_SIZE` | `max_size_mb` | dir size limit for transmission
 `SHIPPER_SECRET` | `session_secret` | session secret for the o2r platform
 `SHIPPER_USERLEVEL_MIN` | `userlevel_min` | user level needed to do shipments
