@@ -60,15 +60,15 @@ def shipment_get_one(name):
         return json.dumps(data)
     else:
         status_note(''.join(('user requested non-existing shipment ', name)))
-        response.status = 400
+        response.status = 404
         response.content_type = 'application/json'
-        return json.dumps({'error': 'not found'})
+        return json.dumps({'error': 'a compendium with that id does not exist'})
 
 
 @app.route('/api/v1/shipment', method='GET')
 def shipment_get_all():
     try:
-        sid = request.query.id
+        ##sid = request.query.id
         cid = request.query.compendium_id
         answer_list = []
         for key in db['shipments'].find():
@@ -76,7 +76,6 @@ def shipment_get_all():
         response.status = 200
         response.content_type = 'application/json'
         if cid:
-            # TODO shipment?compendium_id=XXX must return a list of all shipments for the compendium
             answer_list = []
             for key in db['shipments'].find({'compendium_id': cid}):
                 answer_list.append(key['id'])
@@ -88,7 +87,8 @@ def shipment_get_all():
 
 
 @app.route('/api/v1/shipment', method='POST')
-def shipment_post_new():
+def shipment_new():
+    # currently only zenodo supported
     try:
         status_note('# # # New shipment request # # #')
         global env_compendium_files
@@ -112,6 +112,11 @@ def shipment_post_new():
             if new_id is None:
                 # create new shipment id because request did not include one
                 new_id = uuid.uuid4()
+            new_md = request.forms.get('md')
+            if new_md is None:
+                new_md = {}
+            else:
+                new_md = ast.literal_eval(new_md)
             data = {'id': str(new_id),
                     'compendium_id': request.forms.get('compendium_id'),
                     'deposition_id': request.forms.get('deposition_id'),
@@ -121,71 +126,64 @@ def shipment_post_new():
                     'user': user_entitled,
                     'status': 'new',
                     'action': request.forms.get('action'),
-                    'md': ast.literal_eval(request.forms.get('md'))
+                    'md': new_md
                     }
-            #db['shipments'].save(data) # deprecated (pymongo)
+            #db['shipments'].save(data)  # deprecated (pymongo)
             current_mongo_doc = db.shipments.insert_one(data)
             status_note('created shipment object ' + str(current_mongo_doc.inserted_id))
-            # submit to zenodo:
-            if data['recipient'] == 'zenodo':
+            # CRUD: Create
+            action = data['action'][:1].lower()
+            if action == "c":
                 status = 200
-                # CRUD: Create or Update
-                action = data['action'][:1].lower()
-                if action == "c":
-                    if not data['deposition_id']:
-                        # no depot yet, go create one
-                        current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
-                        if current_compendium:
-                            compendium_files = os.path.join(env_compendium_files, data['compendium_id'])
-                            if os.path.isdir(compendium_files):
-                                file_name = str(data['compendium_id']) + '.zip'
-                                data['deposition_id'] = zen_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
-                                data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'deposit/'), data['deposition_id']))
-                                zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
-                                if 'metadata' in current_compendium:
-                                    if 'zenodo' in current_compendium['metadata']:
-                                        md = current_compendium['metadata']['zenodo']
-                                        #debug#status_note(str(md))
-                                        zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, env_repository_zenodo_token)
-                                data['status'] = 'deposited'
-                            else:
-                                status_note('! error, invalid path to compendium: ' + compendium_files)
-                                data['status'] = 'error'
-                                status = 500
-                    # update shipment data in database
-                    #db['shipments'].save(data)  # deprecated (pymongo)
-                    db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {"$set": data},  upsert=True)
-                    status_note('updated shipment object ' + str(current_mongo_doc.inserted_id))
-                    # build and send response
-                    response.status = status
-                    response.content_type = 'application/json'
-                    # preview object for logger:
-                    d = {'id': data['id'],
-                         'recipient': data['recipient'],
-                         'status': data['status']
-                         }
-                    return json.dumps(d)
-                # CRUD: Update
-                elif action == "u":
-                    if data['md'] is not None:
-                        zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], data['md'], env_repository_zenodo_token)
-                # CRUD: Read
-                elif action == "r":
-                    pass
-                # CRUD: Delete
-                elif action == "d":
-                    # delete file(s) from depot
-                    zen_del_from_depot(env_repository_zenodo_host, data['deposition_id'], env_repository_zenodo_token)
-                else:
-                    # not zenodo (currently no others supported)
-                    response.status = 400
-                    response.content_type = 'application/json'
-                    return json.dumps({'error': 'unknown recipient'})
+                if not data['deposition_id']:
+                    # no depot yet, go create one
+                    current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
+                    if current_compendium:
+                        # zip all files in dir and submit as zip:
+                        compendium_files = os.path.join(env_compendium_files, data['compendium_id'])
+                        if os.path.isdir(compendium_files):
+                            file_name = '.'.join((str(data['compendium_id']), 'zip'))
+                            data['deposition_id'] = zen_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
+                            data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'deposit/'), data['deposition_id']))
+                            zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
+                            # Add metadata that are in compendium in db:
+                            if 'metadata' in current_compendium:
+                                if 'zenodo' in current_compendium['metadata']:
+                                    md = current_compendium['metadata']['zenodo']
+                                    zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, env_repository_zenodo_token)
+                            data['status'] = 'deposited'
+                        else:
+                            status_note('! error, invalid path to compendium: ' + compendium_files)
+                            data['status'] = 'error'
+                            status = 400
+                # update shipment data in database
+                #db['shipments'].save(data)  # deprecated (pymongo)
+                db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                status_note('updated shipment object ' + str(current_mongo_doc.inserted_id))
+                # build and send response
+                response.status = status
+                response.content_type = 'application/json'
+                # preview object for logger:
+                d = {'id': data['id'],
+                     'recipient': data['recipient'],
+                     'status': data['status']
+                     }
+                return json.dumps(d)
+            # CRUD: Update
+            elif action == "u":
+                if data['md'] is not None:
+                    zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], data['md'], env_repository_zenodo_token)
+            # CRUD: Read
+            elif action == "r":
+                pass
+            # CRUD: Delete
+            elif action == "d":
+                # delete file(s) from depot
+                zen_del_from_depot(env_repository_zenodo_host, data['deposition_id'], env_repository_zenodo_token)
             else:
-                # not zenodo (currently no others supported)
                 response.status = 400
                 response.content_type = 'application/json'
-                return json.dumps({'error': 'unknown recipient'})
+                return json.dumps({'error': 'unknown action parameter'})
         else:
             response.status = 403
             response.content_type = 'application/json'
@@ -267,6 +265,7 @@ def zen_create_depot(base, token):
             status_note(''.join((str(r.status_code), ' created depot <', str(r.json()['id']),'>')))
         else:
             status_note(r.status_code)
+        # return id of newly created depot as response
         return str(r.json()['id'])
     except requests.exceptions.Timeout:
         status_note('server at <'+base+'> timed out')
@@ -309,6 +308,14 @@ def zen_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
     except Exception as exc:
         # raise
         status_note(''.join(('! error: ', exc.args[0])))
+
+
+def zen_add_files_to_depot(target_path):
+    #todo: -get bucket of depot
+    for root, dirs, files in os.walk(target_path):  # .split(os.sep)[-1]):
+        for file in files:
+            #  -put each file into bucket
+            print(">>>"+ str(file))
 
 
 def zen_add_metadata(base, deposition_id, md, token):
@@ -360,7 +367,7 @@ def zen_del_from_depot(base, deposition_id, token):
         # make delete request for that file
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '/files/', file_id, '?access_token=', token)))
         if r.status_code == 204:
-            status_note(str(r.status_code) + ' deleted <', file_id, '> from <' + str(deposition_id) + '>')
+            status_note(str(r.status_code) + ' deleted <' + file_id+ '> from <' + str(deposition_id) + '>')
         elif r.status_code == 403:
             status_note(str(r.status_code) + ' ! insufficient access rights <' + str(deposition_id) + '>. Cannot delete from an already published deposition.')
             status_note(str(r.text))
@@ -369,8 +376,6 @@ def zen_del_from_depot(base, deposition_id, token):
         else:
             status_note(str(r.status_code))
             status_note(str(r.text))
-
-
     except Exception as exc:
         raise
         #status_note(''.join(('! error: ', exc.args[0])))
@@ -415,7 +420,7 @@ def xstr(s):
 
 # Main
 if __name__ == "__main__":
-    my_version = 3  # update me!
+    my_version = 4  # update me!
     my_mod = ''
     try:
         my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
@@ -450,7 +455,7 @@ if __name__ == "__main__":
         env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
         env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', config['userlevel_min'])
         env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
-        env_compendium_files = os.path.join(env_file_base_path, 'compendium')  #config, + compendium_id
+        env_compendium_files = os.path.join(env_file_base_path, 'compendium')
         env_user_id = None
         status_note(''.join(('loaded config and env:', '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name, '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port))))
     except:
@@ -470,10 +475,10 @@ if __name__ == "__main__":
         sys.exit(1)
     # start service
     try:
-        status_note(''.join(('starting bottle at ' + env_bottle_host + ':' + str(env_bottle_port), '...')))
+        status_note(''.join(('starting bottle at ', env_bottle_host, ':', str(env_bottle_port), '...')))
         status_note(base64.b64decode('bGF1bmNoaW5nDQouLS0tLS0tLS0tLS0tLS0uDQp8ICAgICBfLl8gIF8gICAgYC4sX19fX19fDQp8ICAgIChvMnIoKF8oICAgICAgX19fKF8oKQ0KfCAgXCctLTotLS06LS4gICAsJw0KJy0tLS0tLS0tLS0tLS0tJ8#K0DQo=').decode('utf-8'))
         time.sleep(0.1)
-        app = WSGILogger(app, [ logging.StreamHandler(sys.stdout) ], ApacheFormatter())
+        app = WSGILogger(app, [logging.StreamHandler(sys.stdout)], ApacheFormatter())
         run(app=app, host=env_bottle_host, port=env_bottle_port, debug=True)
     except Exception as exc:
         status_note('! error: bottle server could not be started: ' + traceback.format_exc())
