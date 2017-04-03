@@ -133,7 +133,7 @@ def shipment_new():
             current_mongo_doc = db.shipments.insert_one(data)
             status_note('created shipment object ' + str(current_mongo_doc.inserted_id))
             if data['recipient'] == 'zenodo':
-                action = data['action'][:1].lower()
+                action = data['action'].lower()
                 if action == "c":
                     status = 200
                     if not data['deposition_id']:
@@ -179,6 +179,9 @@ def shipment_new():
                 elif action == "d":
                     # delete file(s) from depot
                     zen_del_from_depot(env_repository_zenodo_host, data['deposition_id'], data['file_id'], env_repository_zenodo_token)
+                elif action == "delete":
+                    # delete whole depot
+                    zen_del_depot(env_repository_zenodo_host, data['deposition_id'], env_repository_zenodo_token)
                 else:
                     response.status = 400
                     response.content_type = 'application/json'
@@ -453,10 +456,11 @@ def zen_del_from_depot(base, deposition_id, file_id, token):
 
 
 def zen_del_depot(base, deposition_id, token):
+    # DELETE /api/deposit/depositions/:id
     try:
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)))
         if r.status_code == 204:
-            status_note(''.join((str(r.status_code), ' removed depot <', deposition_id, '>')))
+            status_note(''.join((str(r.status_code), ' deleted depot <', deposition_id, '>')))
         else:
             status_note(r.status_code)
     except Exception as exc:
@@ -491,7 +495,7 @@ def xstr(s):
 
 # Main
 if __name__ == "__main__":
-    my_version = 6  # update me!
+    my_version = 7  # update me!
     my_mod = ''
     try:
         my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
