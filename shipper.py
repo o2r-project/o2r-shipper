@@ -126,7 +126,8 @@ def shipment_new():
                     'user': user_entitled,
                     'status': 'new',
                     'action': request.forms.get('action'),
-                    'md': new_md
+                    'md': new_md,
+                    'file_id': request.forms.get('file_id')
                     }
             #db['shipments'].save(data)  # deprecated (pymongo)
             current_mongo_doc = db.shipments.insert_one(data)
@@ -169,13 +170,15 @@ def shipment_new():
                          'status': data['status']
                          }
                     return json.dumps(d)
+                elif action == "r":
+                    zen_get_list_of_files_from_depot(env_repository_zenodo_host, data['deposition_id'], env_repository_zenodo_token)
                 elif action == "u":
                     # update
                     if data['md'] is not None:
                         zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], data['md'], env_repository_zenodo_token)
                 elif action == "d":
                     # delete file(s) from depot
-                    zen_del_from_depot(env_repository_zenodo_host, data['deposition_id'], env_repository_zenodo_token)
+                    zen_del_from_depot(env_repository_zenodo_host, data['deposition_id'], data['file_id'], env_repository_zenodo_token)
                 else:
                     response.status = 400
                     response.content_type = 'application/json'
@@ -287,9 +290,9 @@ def eudat_update_md(base_url, record_id, my_md, access_token):
     try:
         url = ''.join((base_url, "/api/records/", record_id, "/draft?access_token=", access_token))
         # test:
-        d = [{"op": "add", "path": "/keywords", "value": ["keyword1", "keyword2"]}]
+        # test_md = [{"op": "add", "path": "/keywords", "value": ["keyword1", "keyword2"]}]
         headers = {"Content-Type": "application/json-patch+json"}
-        r = requests.patch(url, data=json.dumps(d), headers=headers)
+        r = requests.patch(url, data=json.dumps(my_md), headers=headers)
         status_note(str(r.status_code) + " " + str(r.reason))
         status_note(str(r.json()))
     except:
@@ -392,10 +395,35 @@ def zen_create_empty_depot(base, deposition_id, token):
         raise
 
 
+def zen_get_list_of_files_from_depot(base, deposition_id, token):
+    try:
+        # get file id from bucket url:
+        headers = {"Content-Type": "application/json"}
+        r = requests.get(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)),
+                         headers=headers)
+        file_list = r.json()['files']
+        if r.status_code == 200:
+            status_note(str(r.status_code) + ". File list of depot " + str(deposition_id) + ":")
+            status_note(json.dumps(file_list))
+        elif r.status_code == 403:
+            status_note(str(r.status_code) + ' ! insufficient access rights <' + str(
+                deposition_id) + '>. Cannot delete from an already published deposition.')
+            status_note(str(r.text))
+        elif r.status_code == 404:
+            status_note(str(r.status_code) + ' ! failed to retrieve file at <' + str(deposition_id) + '>')
+        else:
+            status_note(str(r.status_code))
+            status_note(str(r.text))
+    except Exception as exc:
+        raise
+        # status_note(''.join(('! error: ', exc.args[0])))
 
-def zen_del_from_depot(base, deposition_id, token):
+
+def zen_del_from_depot(base, deposition_id, file_id, token):
     # Zenodo reference:
     # r = requests.delete("https://zenodo.org/api/deposit/depositions/1234/files/21fedcba-9876-5432-1fed-cba987654321?access_token=ACCESS_TOKEN")
+
+    # DELETE /api/deposit/depositions/:id/files/:file_id
     try:
         # get file id from bucket url:
         status_note(''.join(('attempting to delete from <', deposition_id, '>')))
@@ -403,8 +431,10 @@ def zen_del_from_depot(base, deposition_id, token):
         r = requests.get(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)),
                          headers=headers)
         # currently: use first and only file
-        # todo: delete selected files (parameter is file_id from bucket) OR delete alle files form depot
-        file_id = r.json()['files'][0]['links']['self'].rsplit('/', 1)[-1]
+        # todo: delete selected files (parameter is file_id from bucket) OR delete all files form depot
+        if file_id is None:
+            # no target file specified, hence delete first file
+            file_id = r.json()['files'][0]['links']['self'].rsplit('/', 1)[-1]
         # make delete request for that file
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '/files/', file_id, '?access_token=', token)))
         if r.status_code == 204:
@@ -461,7 +491,7 @@ def xstr(s):
 
 # Main
 if __name__ == "__main__":
-    my_version = 5  # update me!
+    my_version = 6  # update me!
     my_mod = ''
     try:
         my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
