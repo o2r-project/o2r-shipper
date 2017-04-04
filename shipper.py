@@ -88,7 +88,6 @@ def shipment_get_all():
 
 @app.route('/api/v1/shipment', method='POST')
 def shipment_new():
-    # currently only zenodo supported
     try:
         status_note('# # # New shipment request # # #')
         global env_compendium_files
@@ -132,18 +131,18 @@ def shipment_new():
             #db['shipments'].save(data)  # deprecated (pymongo)
             current_mongo_doc = db.shipments.insert_one(data)
             status_note('created shipment object ' + str(current_mongo_doc.inserted_id))
-            if data['recipient'] == 'zenodo':
-                action = data['action'].lower()
-                if action == "c":
-                    status = 200
-                    if not data['deposition_id']:
-                        # no depot yet, go create one
-                        current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
-                        if current_compendium:
-                            # zip all files in dir and submit as zip:
-                            compendium_files = os.path.join(env_compendium_files, data['compendium_id'])
-                            if os.path.isdir(compendium_files):
-                                file_name = '.'.join((str(data['compendium_id']), 'zip'))
+            action = data['action'].lower()
+            if action == "c":
+                status = 200
+                if not data['deposition_id']:
+                    # no depot yet, go create one
+                    current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
+                    if current_compendium:
+                        # zip all files in dir and submit as zip:
+                        compendium_files = os.path.join(env_compendium_files, data['compendium_id'])
+                        if os.path.isdir(compendium_files):
+                            file_name = '.'.join((str(data['compendium_id']), 'zip'))
+                            if data['recipient'] == 'zenodo':
                                 data['deposition_id'] = zen_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
                                 data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'deposit/'), data['deposition_id']))
                                 zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
@@ -151,47 +150,68 @@ def shipment_new():
                                 if 'metadata' in current_compendium:
                                     if 'zenodo' in current_compendium['metadata']:
                                         md = current_compendium['metadata']['zenodo']
-                                        zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md, env_repository_zenodo_token)
+                                        zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md,
+                                                         env_repository_zenodo_token)
                                 data['status'] = 'deposited'
-                            else:
-                                status_note('! error, invalid path to compendium: ' + compendium_files)
-                                data['status'] = 'error'
-                                status = 400
-                    # update shipment data in database
-                    #db['shipments'].save(data)  # deprecated (pymongo)
-                    db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                    status_note('updated shipment object ' + str(current_mongo_doc.inserted_id))
-                    # build and send response
-                    response.status = status
-                    response.content_type = 'application/json'
-                    # preview object for logger:
-                    d = {'id': data['id'],
-                         'recipient': data['recipient'],
-                         'status': data['status']
-                         }
-                    return json.dumps(d)
-                elif action == "r":
+                            elif data['recipient'] == 'eudat':
+                                data['deposition_id'] = eudat_create_depot(env_repository_eudat_host, env_repository_eudat_token)
+                                data['deposition_url'] = ''.join((env_repository_eudat_host.replace('api', 'records/'), data['deposition_id']))
+                                eudat_add_zip_to_depot(env_repository_eudat_host, data['deposition_id'], file_name, compendium_files, env_repository_eudat_token)
+                                # Add metadata that are in compendium in db:
+                                if 'metadata' in current_compendium:
+                                    if 'eudat' in current_compendium['metadata']:
+                                        md = current_compendium['metadata']['eudat']
+                                        zen_add_metadata(env_repository_eudat_host, data['deposition_id'], md,
+                                                         env_repository_eudat_token)
+                                data['status'] = 'deposited'
+                        else:
+                            status_note('! error, invalid path to compendium: ' + compendium_files)
+                            data['status'] = 'error'
+                            status = 400
+                # update shipment data in database
+                #db['shipments'].save(data)  # deprecated (pymongo)
+                db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                status_note('updated shipment object ' + str(current_mongo_doc.inserted_id))
+                # build and send response
+                response.status = status
+                response.content_type = 'application/json'
+                # preview object for logger:
+                d = {'id': data['id'],
+                     'recipient': data['recipient'],
+                     'status': data['status']
+                     }
+                return json.dumps(d)
+            elif action == "r":
+                if data['recipient'] == 'zenodo':
                     zen_get_list_of_files_from_depot(env_repository_zenodo_host, data['deposition_id'], env_repository_zenodo_token)
-                elif action == "u":
-                    # update
-                    if data['md'] is not None:
+                elif data['recipient'] == 'eudat':
+                    # todo add eudat_func here
+                    pass
+            elif action == "u":
+                # update
+                if data['md'] is not None:
+                    if data['recipient'] == 'zenodo':
                         zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], data['md'], env_repository_zenodo_token)
-                elif action == "d":
-                    # delete file(s) from depot
+                    elif data['recipient'] == 'eudat':
+                        eudat_update_md(env_repository_eudat_host, data['deposition_id'], data['md'], env_repository_eudat_token)
+            elif action == "d":
+                # delete file(s) from depot
+                if data['recipient'] == 'zenodo':
                     zen_del_from_depot(env_repository_zenodo_host, data['deposition_id'], data['file_id'], env_repository_zenodo_token)
-                elif action == "delete":
-                    # delete whole depot
+                elif data['recipient'] == 'eudat':
+                    # todo add eudat_func here
+                    pass
+            elif action == "delete":
+                # delete whole depot
+                if data['recipient'] == 'zenodo':
                     zen_del_depot(env_repository_zenodo_host, data['deposition_id'], env_repository_zenodo_token)
-                else:
-                    response.status = 400
-                    response.content_type = 'application/json'
-                    return json.dumps({'error': 'unknown action parameter'})
-            elif data['recipient'] == 'eudat':
-                # todo: add eudat c(r)ud
-                pass
+                elif data['recipient'] == 'eudat':
+                    # todo add eudat_func here
+                    pass
             else:
-                # unkown recipient
-                pass
+                response.status = 400
+                response.content_type = 'application/json'
+                return json.dumps({'error': 'unknown action parameter'})
         else:
             response.status = 403
             response.content_type = 'application/json'
@@ -263,39 +283,65 @@ def session_user_entitled(cookie, min_lvl):
         return None
 
 
-# Eudat
-def eudat_create_depot(base_url, access_token):
-    headers = {"Content-Type": "application/json"}
-    url = ''.join((base_url,"/api/records/?access_token=", access_token))
-    # test md
-    d = {"titles": [{"title": "TestRest"}], "community": "e9b9792e-79fb-4b07-b6b4-b9c2bd06d095", "open_access": True, "community_specific": {}}
-    r = requests.post(url, data=json.dumps(d), headers=headers)
-    status_note(str(r.status_code) + " " + str(r.reason))
-    status_note(str(r.json()))
-    #status_note('created depot <' + r.json()['id'] +'>')
-    return str(r.json())
-
-
-def eudat_add_files_depot(file_path):
+# Eudat b2share
+def eudat_create_depot(base, access_token):
     try:
-        # todo: get bucket_url from response of newly created records under "links.files"
-        bucket_url = ""
-        headers = {"Content-Type": "application/octet-stream"}
-        stream = open(file_path, 'rb').read()
-        r = requests.put("".join((bucket_url, "/", os.path.basename(file_path), "?access_token=", access_token)), data=stream, headers=headers)
+        headers = {"Content-Type": "application/json"}
+        base_url = ''.join((base, "/records/?access_token=", access_token))
+        # test md
+        d = {"titles": [{"title": "TestRest"}], "community": "e9b9792e-79fb-4b07-b6b4-b9c2bd06d095", "open_access": True, "community_specific": {}}
+        r = requests.post(base_url, data=json.dumps(d), headers=headers)
         status_note(str(r.status_code) + " " + str(r.reason))
-        status_note(str(r.json()))
+        status_note('[debug] ' + str(r.json()))
+        status_note('created depot <' + r.json()['id'] + '>')
+        return str(r.json()['id'])
     except:
         raise
 
 
-def eudat_update_md(base_url, record_id, my_md, access_token):
+def eudat_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
     try:
-        url = ''.join((base_url, "/api/records/", record_id, "/draft?access_token=", access_token))
+        fsum = files_dir_size(target_path)
+        if fsum <= env_max_dir_size_mb:
+            # get bucket url:
+            headers = {"Content-Type": "application/json"}
+            r = requests.get(''.join((base, '/records/', deposition_id, '/draft?access_token=', token)), headers=headers)
+            bucket_url = r.json()['links']['files']
+            if r.status_code == 200:
+                status_note(str(r.status_code) + ' using bucket <' + bucket_url + '>')
+            else:
+                status_note(r.status_code)
+            # upload file into bucket:
+            headers = {"Content-Type": "application/octet-stream"}
+            # create a filelike object in memory
+            filelike = BytesIO()
+            # fill memory object into zip constructor
+            zipf = zipfile.ZipFile(filelike, 'w', zipfile.ZIP_DEFLATED)
+            # walk target dir recursively
+            for root, dirs, files in os.walk(target_path):  #.split(os.sep)[-1]):
+                for file in files:
+                    zipf.write(os.path.join(root, file), arcname=os.path.relpath(os.path.join(root, file), target_path))
+            zipf.close()
+            filelike.seek(0)
+            r = requests.put("".join((bucket_url, '/', zip_name, '?access_token=', token)), data=filelike.read(), headers=headers)
+            if r.status_code == 200:
+                status_note(''.join((str(r.status_code), ' uploaded file <', zip_name, '> to depot <', deposition_id, '> ', str(r.json()['checksum']))))
+            else:
+                status_note(r.status_code)
+        else:
+            status_note("! error: file not found")
+    except Exception as exc:
+        # raise
+        status_note(''.join(('! error: ', exc.args[0])))
+
+
+def eudat_update_md(base, record_id, my_md, access_token):
+    try:
+        base_url = ''.join((base, "/api/records/", record_id, "/draft?access_token=", access_token))
         # test:
         # test_md = [{"op": "add", "path": "/keywords", "value": ["keyword1", "keyword2"]}]
         headers = {"Content-Type": "application/json-patch+json"}
-        r = requests.patch(url, data=json.dumps(my_md), headers=headers)
+        r = requests.patch(base_url, data=json.dumps(my_md), headers=headers)
         status_note(str(r.status_code) + " " + str(r.reason))
         status_note(str(r.json()))
     except:
@@ -504,7 +550,6 @@ if __name__ == "__main__":
         sys.exit(1)
     status_note(''.join(('v', str(my_version), ' - ', str(my_mod))))
     parser = argparse.ArgumentParser(description='shipper arguments')
-    # args required:
     # args optional:
     parser.add_argument('-t', '--token', help='access token', required=False)
     parser.add_argument('-x', '--testmode', help='remove depot immediately after upload, for testing purpose.', action='store_true', required=False)
@@ -521,10 +566,13 @@ if __name__ == "__main__":
         env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
         env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
         env_repository_zenodo_host = os.environ.get('SHIPPER_REPO_ZENODO_HOST', config['repository_zenodo_host'])
+        env_repository_eudat_host = os.environ.get('SHIPPER_REPO_EUDAT_HOST', config['repository_eudat_host'])
         if args['token'] is None:
             env_repository_zenodo_token = os.environ.get('SHIPPER_REPO_ZENODO_TOKEN', config['repository_zenodo_token'])
+            env_repository_eudat_token = os.environ.get('SHIPPER_REPO_EUDAT_TOKEN', config['repository_eudat_token'])
         else:
             env_repository_zenodo_token = args['token']
+            env_repository_eudat_token = args['token']
         env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
         env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
         env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
