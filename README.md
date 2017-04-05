@@ -56,7 +56,7 @@ Configuration is based on environment variables as shown in the table below. The
 `SHIPPER_REPO_EUDAT_HOST` | `repository_eudat_host` | host of Eudat b2share's API, defaults to _b2share Sandbox_
 `SHIPPER_REPO_EUDAT_TOKEN` | `repository_eudat_token` | API token for zenodo
 `SHIPPER_REPO_ZENODO_HOST` | `repository_zenodo_host` | host of Zenodo's API, defaults to _Zenodo Sandbox_
-`SHIPPER_REPO_ZENODO_TOKEN` | `repository_zenodo_token` | API token for zenodo
+`SHIPPER_REPO_ZENODO_TOKEN` | `repository_zenodo_token` | API token for Eudat b2share
 `SHIPPER_BASE_PATH` | `base_path` | base path of target compendium
 `SHIPPER_MAX_DIR_SIZE` | `max_size_mb` | dir size limit for transmission
 `SHIPPER_SECRET` | `session_secret` | session secret for the o2r platform
@@ -70,7 +70,6 @@ Configuration is based on environment variables as shown in the table below. The
 
 To ship ERC to [Eudat b2share](https://b2share.eudat.eu/) (or the [Eudat b2share Sandbox](https://trng-b2share.eudat.eu/)), you must create an account and log in.
 Then go to your account and get the personal access token.
-
 
 ### Zenodo repository
 

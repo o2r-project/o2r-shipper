@@ -161,8 +161,7 @@ def shipment_new():
                                 if 'metadata' in current_compendium:
                                     if 'eudat' in current_compendium['metadata']:
                                         md = current_compendium['metadata']['eudat']
-                                        zen_add_metadata(env_repository_eudat_host, data['deposition_id'], md,
-                                                         env_repository_eudat_token)
+                                        eudat_update_md(env_repository_eudat_host, data['deposition_id'], md, env_repository_eudat_token)
                                 data['status'] = 'deposited'
                         else:
                             status_note('! error, invalid path to compendium: ' + compendium_files)
