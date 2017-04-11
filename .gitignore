@@ -1,3 +1,4 @@
 tmp/o2r
 .vscode
-start-shipper-service.cmd
+start-EUDAT-shipper-service.cmd
+start-ZENODO-shipper-service.cmd

@@ -53,8 +53,10 @@ Configuration is based on environment variables as shown in the table below. The
 `SHIPPER_MONGO_NAME` | `mongodb_db` | name of the MongoDB
 `SHIPPER_BOTTLE_HOST` | `bottle_host` | host for bottle, the WSGI micro web-framework used with shipper; default is `localhost`, to allows access from other local services running in containers, set this to `0.0.0.0`
 `SHIPPER_BOTTLE_PORT` | `bottle_port` | port for bottle
+`SHIPPER_REPO_EUDAT_HOST` | `repository_eudat_host` | host of Eudat b2share's API, defaults to _b2share Sandbox_
+`SHIPPER_REPO_EUDAT_TOKEN` | `repository_eudat_token` | API token for zenodo
 `SHIPPER_REPO_ZENODO_HOST` | `repository_zenodo_host` | host of Zenodo's API, defaults to _Zenodo Sandbox_
-`SHIPPER_REPO_ZENODO_TOKEN` | `repository_zenodo_token` | API token for zenodo
+`SHIPPER_REPO_ZENODO_TOKEN` | `repository_zenodo_token` | API token for Eudat b2share
 `SHIPPER_BASE_PATH` | `base_path` | base path of target compendium
 `SHIPPER_MAX_DIR_SIZE` | `max_size_mb` | dir size limit for transmission
 `SHIPPER_SECRET` | `session_secret` | session secret for the o2r platform
@@ -64,7 +66,12 @@ Configuration is based on environment variables as shown in the table below. The
 
 ## Shipment recipients
 
+### Eudat b2share repository
+
+To ship ERC to [Eudat b2share](https://b2share.eudat.eu/) (or the [Eudat b2share Sandbox](https://trng-b2share.eudat.eu/)), you must create an account and log in.
+Then go to your account and get the personal access token.
+
 ### Zenodo repository
 
 To ship ERC to [Zenodo](https://zenodo.org) (or the [Zenodo Sandbox](https://sandbox.zenodo.org)), you must create an account and log in.
-Then got to your account _Settings_, open the _Applications_ settings and add a new _Personal access token_ including the scopes `deposit:write` and `deposit:actions`.
+Then go to your account _Settings_, open the _Applications_ settings and add a new _Personal access token_ including the scopes `deposit:write` and `deposit:actions`.
