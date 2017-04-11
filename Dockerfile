@@ -24,6 +24,21 @@ RUN apk add --no-cache wget git \
 WORKDIR /shipper
 RUN pip install -r requirements.txt
 
+# Metadata params provided with docker build command
+ARG VCS_URL
+ARG VCS_REF
+ARG BUILD_DATE
+
+# Metadata http://label-schema.org/rc1/
+LABEL org.label-schema.vendor="o2r project" \
+      org.label-schema.url="http://o2r.info" \
+      org.label-schema.name="o2r shipper" \
+      org.label-schema.description="ERC shipping to repositories" \    
+      org.label-schema.vcs-url=$VCS_URL \
+      org.label-schema.vcs-ref=$VCS_REF \
+      org.label-schema.build-date=$BUILD_DATE \
+      org.label-schema.docker.schema-version="rc1"
+
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["python", "shipper.py"]
 
