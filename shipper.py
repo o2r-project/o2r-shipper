@@ -86,6 +86,67 @@ def shipment_get_all():
         return json.dumps({'error': 'bad request'})
 
 
+@app.route('/api/v1/shipment/<shipmentid>/status', method='GET')
+def shipment_get_status(shipmentid):
+    try:
+        data = db['shipments'].find_one({'id': shipmentid})
+        if data is not None:
+            if 'status' in data:
+                response.status = 200
+                return {'id': shipmentid, 'status': str(data['status'])}
+            else:
+                response.status = 400
+                return {'error': 'shipment data incomplete'}
+    except:
+        raise
+
+
+@app.route('/api/v1/shipment/<shipmentid>/files', method='GET')
+def shipment_get_file_id(shipmentid):
+    # get file id from depot, in order to be able to delete specific files
+    try:
+        # first get depot via shipment id
+        data = db['shipments'].find_one({'id': shipmentid})
+        current_depot = None
+        if data is not None:
+            if 'deposition_id' in data:
+                current_depot = str(data['deposition_id'])
+                # now get files object from that depot
+                # if recipient is zenodo:
+                headers = {"Content-Type": "application/json"}
+                r = requests.get(''.join((env_repository_zenodo_host, '/deposit/depositions/', current_depot, '?access_token=', env_repository_zenodo_token)), headers=headers)
+                if 'files' in r.json():
+                    response.status = 200
+                    return json_dumps({'files': r.json()['files']})
+                else:
+                    response.status = 400
+                    return {'error': 'no files object in repository response'}
+            else:
+                return {'error': 'no deposition id'}
+    except:
+        raise
+
+
+@app.route('/api/v1/shipment/<shipmentid>/files/<fileid>', method='DELETE')
+def shipment_del_file_id(shipmentid, fileid):
+    # delete specific of a depot of a shipment
+    try:
+        # first get depot via shipment id
+        data = db['shipments'].find_one({'id': shipmentid})
+        current_depot = None
+        if data is not None:
+            if 'deposition_id' in data:
+                current_depot = str(data['deposition_id'])
+                # now get files object from that depot
+            if data['recipient'] == 'zenodo':
+                zen_del_from_depot(env_repository_zenodo_host, current_depot, fileid, env_repository_zenodo_token)
+            else:
+                response.status = 400
+                return {'error': 'no deposition id'}
+    except:
+        raise
+
+
 @app.route('/api/v1/shipment', method='POST')
 def shipment_new():
     try:
@@ -123,7 +184,7 @@ def shipment_new():
                     'recipient': request.forms.get('recipient'),
                     'last_modified': str(datetime.now()),
                     'user': user_entitled,
-                    'status': 'new',
+                    'status': 'shipped',
                     'action': request.forms.get('action'),
                     'md': new_md,
                     'file_id': request.forms.get('file_id')
@@ -152,7 +213,7 @@ def shipment_new():
                                         md = current_compendium['metadata']['zenodo']
                                         zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md,
                                                          env_repository_zenodo_token)
-                                data['status'] = 'deposited'
+                                #data['status'] = 'deposited'
                             elif data['recipient'] == 'eudat':
                                 data['deposition_id'] = eudat_create_depot(env_repository_eudat_host, env_repository_eudat_token)
                                 data['deposition_url'] = ''.join((env_repository_eudat_host.replace('api', 'records/'), data['deposition_id']))
@@ -162,7 +223,7 @@ def shipment_new():
                                     if 'eudat' in current_compendium['metadata']:
                                         md = current_compendium['metadata']['eudat']
                                         eudat_update_md(env_repository_eudat_host, data['deposition_id'], md, env_repository_eudat_token)
-                                data['status'] = 'deposited'
+                                #data['status'] = 'deposited'
                         else:
                             status_note('! error, invalid path to compendium: ' + compendium_files)
                             data['status'] = 'error'
@@ -177,6 +238,7 @@ def shipment_new():
                 # preview object for logger:
                 d = {'id': data['id'],
                      'recipient': data['recipient'],
+                     'deposition_id': data['deposition_id'],
                      'status': data['status']
                      }
                 return json.dumps(d)
@@ -540,14 +602,14 @@ def xstr(s):
 
 # Main
 if __name__ == "__main__":
-    my_version = 7  # update me!
-    my_mod = ''
-    try:
-        my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
-    except OSError as exc:
-        status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
-        sys.exit(1)
-    status_note(''.join(('v', str(my_version), ' - ', str(my_mod))))
+    # my_version = 7  # update me! ## obsolete with microbadger build hash
+    # my_mod = ''
+    # try:
+    #    my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
+    # except OSError as exc:
+    #    status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
+    #    sys.exit(1)
+    # status_note(''.join(('v', str(my_version), ' - ', str(my_mod))))
     parser = argparse.ArgumentParser(description='shipper arguments')
     # args optional:
     parser.add_argument('-t', '--token', help='access token', required=False)
