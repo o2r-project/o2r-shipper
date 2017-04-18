@@ -2,8 +2,8 @@ import requests
 
 
 def test_post(my_shipment_id, my_compendium_id, my_recipient, my_cookie):
-    # curl -i -d '{'_id': null, 'compendium_id': $ID, 'recipient': 'eudat, 'action': 'c', 'cookie': $COOKIE'} -x POST http://localhost:8087/api/v1/shipment
-    new_data = {'_id': my_shipment_id, 'compendium_id': str(my_compendium_id), 'recipient': str(my_recipient), 'action': 'c', 'cookie': str(my_cookie)}
+    # curl -i -d '{'_id': null, 'compendium_id': $ID, 'recipient': 'eudat, 'cookie': $COOKIE'} -x POST http://localhost:8087/api/v1/shipment
+    new_data = {'_id': my_shipment_id, 'compendium_id': str(my_compendium_id), 'recipient': str(my_recipient), 'cookie': str(my_cookie)}
     r = requests.post(''.join((host, 'shipment')), data=new_data)
     print(r.status_code)
     print(r.text)
@@ -23,27 +23,27 @@ def test_post_update(my_depot, my_compendium_id, my_recipient, my_cookie):
         "publication_type": "other",
         "access_right": "open",
         "license": "cc-by"}}
-    new_data = {'deposition_id': my_depot, 'compendium_id': str(my_compendium_id), 'recipient': str(my_recipient), 'action': 'u', 'md': str(test_md), 'cookie': str(my_cookie)}
+    new_data = {'deposition_id': my_depot, 'compendium_id': str(my_compendium_id), 'recipient': str(my_recipient), 'md': str(test_md), 'cookie': str(my_cookie)}
     r = requests.post(''.join((host, 'shipment')), data=new_data)
     print(r.status_code)
     print(r.text)
 
 
 def test_return_filelist(my_depot, my_shipment_id, my_compendium_id, my_recipient, my_cookie):
-    new_data = {'deposition_id': my_depot, '_id': my_shipment_id, 'compendium_id': str(my_compendium_id), 'action': 'r', 'recipient': str(my_recipient), 'cookie': str(my_cookie)}
+    new_data = {'deposition_id': my_depot, '_id': my_shipment_id, 'compendium_id': str(my_compendium_id), 'recipient': str(my_recipient), 'cookie': str(my_cookie)}
     r = requests.post(''.join((host, 'shipment')), data=new_data)
     print(r.status_code)
     print(r.text)
 
 def test_del(my_depot, my_shipment_id, my_compendium_id, my_recipient, my_cookie):
-    new_data = {'deposition_id': my_depot, '_id': my_shipment_id, 'compendium_id': str(my_compendium_id), 'action': 'd', 'recipient': str(my_recipient), 'file_id': 'c9d47625-2f4a-45b9-93c3-832a1dc54f3f', 'cookie': str(my_cookie)}
+    new_data = {'deposition_id': my_depot, '_id': my_shipment_id, 'compendium_id': str(my_compendium_id), 'recipient': str(my_recipient), 'file_id': 'c9d47625-2f4a-45b9-93c3-832a1dc54f3f', 'cookie': str(my_cookie)}
     r = requests.post(''.join((host, 'shipment')), data=new_data)
     print(r.status_code)
     print(r.text)
 
 
 def test_del_whole_depot(my_depot, my_shipment_id, my_recipient, my_cookie):
-    new_data = {'deposition_id': my_depot, '_id': my_shipment_id, 'action': 'delete', 'recipient': str(my_recipient), 'cookie': str(my_cookie)}
+    new_data = {'deposition_id': my_depot, '_id': my_shipment_id, 'recipient': str(my_recipient), 'cookie': str(my_cookie)}
     r = requests.post(''.join((host, 'shipment')), data=new_data)
     print(r.status_code)
     print(r.text)
@@ -69,7 +69,7 @@ the_cookie = ''  # enter your cookie here
 
 try:
     # Shipment create new
-    test_post(None, '4XgD9', 'eudat', the_cookie)
+    test_post(None, '4XgD9', 'zenodo', the_cookie)
 
     # Shipment update metadata only
     #test_post_update('12345', '4XgD9', 'zenodo', the_cookie)
