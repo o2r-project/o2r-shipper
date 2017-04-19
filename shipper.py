@@ -119,18 +119,25 @@ def shipment_get_file_id(shipmentid):
         raise
 
 
-
-@app.route('/api/v1/shipment/<shipmentid>/publishment', method='DELETE')
+@app.route('/api/v1/shipment/<shipmentid>/publishment', method='PUT')
 def shipment_put_publishment(shipmentid):
     try:
         #! once published, cant delete
         current_depot = db_find_depotid_from_shipment(shipmentid)
         if db_find_recipient_from_shipment(shipmentid) == 'zenodo':
-            headers = {"Content-Type": "application/json"}
-            r = requests.get(''.join((env_repository_zenodo_host, '/deposit/depositions/', current_depot, '/publish?access_token=',
-                              env_repository_zenodo_token)), headers=headers)
-            status_note(r.json())
-            return {'published': shipmentid}
+            r = requests.post(''.join((env_repository_zenodo_host, '/deposit/depositions/', current_depot, '/actions/publish?access_token=',
+                              env_repository_zenodo_token)))
+            if r.status_code == 202:
+                db.shipments.update_one({'id': shipmentid}, {'$set': {'status': 'published'}}, upsert=True)
+                if 'doi_url' in r.json():
+                    db.shipments.update_one({'id': shipmentid}, {'$set': {'doi_url': r.json()['doi_url']}}, upsert=True)
+                response.status = r.status_code
+                response.content_type = 'application/json'
+                return {'id': shipmentid, 'status': 'published'}
+            else:
+                response.status = r.status_code
+        else:
+            status_note('unknown recipient')
     except:
         raise
 
