@@ -103,7 +103,6 @@ def shipment_get_status(shipmentid):
 
 @app.route('/api/v1/shipment/<shipmentid>/files', method='GET')
 def shipment_get_file_id(shipmentid):
-    # get file id from depot, in order to be able to delete specific files
     try:
         current_depot = db_find_depotid_from_shipment(shipmentid)
         if db_find_recipient_from_shipment(shipmentid) == 'zenodo':
@@ -115,6 +114,10 @@ def shipment_get_file_id(shipmentid):
             else:
                 response.status = 400
                 return {'error': 'no files object in repository response'}
+        elif db_find_recipient_from_shipment(shipmentid) == 'eudat':
+            pass
+        else:
+            status_note('unknown recipient')
     except:
         raise
 
@@ -136,6 +139,8 @@ def shipment_put_publishment(shipmentid):
                 return {'id': shipmentid, 'status': 'published'}
             else:
                 response.status = r.status_code
+        elif db_find_recipient_from_shipment(shipmentid) == 'eudat':
+            pass
         else:
             status_note('unknown recipient')
     except:
@@ -148,7 +153,11 @@ def shipment_del_file_id(shipmentid, fileid):
     try:
         current_depot = db_find_depotid_from_shipment(shipmentid)
         if db_find_recipient_from_shipment(shipmentid) == 'zenodo':
-            zen_del_from_depot(env_repository_zenodo_host, current_depot, fileid, env_repository_zenodo_token)
+            zenodo_del_from_depot(env_repository_zenodo_host, current_depot, fileid, env_repository_zenodo_token)
+        elif db_find_recipient_from_shipment(shipmentid) == 'eudat':
+            pass
+        else:
+            status_note('unknown recipient')
     except:
         raise
 
@@ -182,7 +191,10 @@ def shipment_post_new():
             if new_md is None:
                 new_md = {}
             else:
-                new_md = ast.literal_eval(new_md)
+                try:
+                    new_md = ast.literal_eval(new_md)
+                except:
+                    new_md = {}
             data = {'id': str(new_id),
                     'compendium_id': request.forms.get('compendium_id'),
                     'deposition_id': request.forms.get('deposition_id'),
@@ -206,16 +218,15 @@ def shipment_post_new():
                     if os.path.isdir(compendium_files):
                         file_name = '.'.join((str(data['compendium_id']), 'zip'))
                         if data['recipient'] == 'zenodo':
-                            data['deposition_id'] = zen_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
+                            data['deposition_id'] = zenodo_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
                             data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'deposit/'), data['deposition_id']))
-                            zen_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
+                            zenodo_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
                             # Add metadata that are in compendium in db:
                             if 'metadata' in current_compendium:
                                 if 'zenodo' in current_compendium['metadata']:
                                     md = current_compendium['metadata']['zenodo']
-                                    zen_add_metadata(env_repository_zenodo_host, data['deposition_id'], md,
-                                                     env_repository_zenodo_token)
-                            #data['status'] = 'deposited'
+                                    zenodo_add_metadata(env_repository_zenodo_host, data['deposition_id'], md,
+                                                        env_repository_zenodo_token)
                         elif data['recipient'] == 'eudat':
                             data['deposition_id'] = eudat_create_depot(env_repository_eudat_host, env_repository_eudat_token)
                             data['deposition_url'] = ''.join((env_repository_eudat_host.replace('api', 'records/'), data['deposition_id']))
@@ -225,7 +236,6 @@ def shipment_post_new():
                                 if 'eudat' in current_compendium['metadata']:
                                     md = current_compendium['metadata']['eudat']
                                     eudat_update_md(env_repository_eudat_host, data['deposition_id'], md, env_repository_eudat_token)
-                            #data['status'] = 'deposited'
                     else:
                         status_note('! error, invalid path to compendium: ' + compendium_files)
                         data['status'] = 'error'
@@ -249,13 +259,13 @@ def shipment_post_new():
             response.content_type = 'application/json'
             return json.dumps({'error': 'insufficient permissions (not logged in?)'})
     except requests.exceptions.RequestException as exc:
-        raise
+        raise  # debug
         status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
     except Exception as exc:
-        raise
+        raise  # debug
         status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
         message = ''.join('bad request:', exc.args[0])
         response.status = 500
@@ -381,7 +391,7 @@ def eudat_update_md(base, record_id, my_md, access_token):
 
 
 # Repository Zenodo
-def zen_create_depot(base, token):
+def zenodo_create_depot(base, token):
     try:
         # create new empty upload depot:
         headers = {"Content-Type": "application/json"}
@@ -399,7 +409,7 @@ def zen_create_depot(base, token):
         status_note(''.join(('! error: ', exc.args[0])))
 
 
-def zen_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
+def zenodo_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
     try:
         fsum = files_dir_size(target_path)
         if fsum <= env_max_dir_size_mb:
@@ -435,18 +445,18 @@ def zen_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
         status_note(''.join(('! error: ', exc.args[0])))
 
 
-def zen_add_files_to_depot(target_path):
+def zenodo_add_files_to_depot(target_path):
+    pass
     #todo: -get bucket of depot
-    for root, dirs, files in os.walk(target_path):  # .split(os.sep)[-1]):
-        for file in files:
-            #  -put each file into bucket
-            print(">>>" + str(file))
+    #for root, dirs, files in os.walk(target_path):  # .split(os.sep)[-1]):
+    #    for file in files:
+    #        #  -put each file into bucket
 
 
-def zen_add_metadata(base, deposition_id, md, token):
+def zenodo_add_metadata(base, deposition_id, md, token):
     try:
-        ## official zenodo test md:
-        ##md = {"metadata": {"title": "My first upload", "upload_type": "poster", "description": "This is my first upload", "creators": [{"name": "Doe, John", "affiliation": "Zenodo"}]}}
+        # official zenodo test md:
+        #md = {"metadata": {"title": "My first upload", "upload_type": "poster", "description": "This is my first upload", "creators": [{"name": "Doe, John", "affiliation": "Zenodo"}]}}
         status_note('updating metadata ' + str(md)[:500])
         headers = {"Content-Type": "application/json"}
         r = requests.put(''.join((base, '/deposit/depositions/', str(deposition_id), '?access_token=', token)), data=json.dumps(md), headers=headers)
@@ -465,7 +475,7 @@ def zen_add_metadata(base, deposition_id, md, token):
         status_note(''.join(('! failed to submit metadata: ', exc.args[0])))
 
 
-def zen_create_empty_depot(base, deposition_id, token):
+def zenodo_create_empty_depot(base, deposition_id, token):
     try:
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)))
         if r.status_code == 204:
@@ -476,7 +486,7 @@ def zen_create_empty_depot(base, deposition_id, token):
         raise
 
 
-def zen_get_list_of_files_from_depot(base, deposition_id, token):
+def zenodo_get_list_of_files_from_depot(base, deposition_id, token):
     try:
         # get file id from bucket url:
         headers = {"Content-Type": "application/json"}
@@ -500,7 +510,7 @@ def zen_get_list_of_files_from_depot(base, deposition_id, token):
         # status_note(''.join(('! error: ', exc.args[0])))
 
 
-def zen_del_from_depot(base, deposition_id, file_id, token):
+def zenodo_del_from_depot(base, deposition_id, file_id, token):
     # Zenodo reference:
     # r = requests.delete("https://zenodo.org/api/deposit/depositions/1234/files/21fedcba-9876-5432-1fed-cba987654321?access_token=ACCESS_TOKEN")
 
@@ -533,7 +543,7 @@ def zen_del_from_depot(base, deposition_id, file_id, token):
         #status_note(''.join(('! error: ', exc.args[0])))
 
 
-def zen_del_depot(base, deposition_id, token):
+def zenodo_del_depot(base, deposition_id, token):
     # DELETE /api/deposit/depositions/:id
     try:
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)))
@@ -581,8 +591,8 @@ def files_dir_size(my_path):
 
 
 # Self
-def status_note(msg):
-    print(''.join(('[shipper] ', str(msg))))
+def status_note(msgtxt):
+    print(''.join(('[shipper] ', str(msgtxt))))
 
 
 def xstr(s):
