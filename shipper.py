@@ -93,10 +93,12 @@ def shipment_get_status(shipmentid):
         if data is not None:
             if 'status' in data:
                 response.status = 200
+                response.content_type = 'application/json'
                 return {'id': shipmentid, 'status': str(data['status'])}
             else:
                 response.status = 400
-                return {'error': 'shipment data incomplete'}
+                response.content_type = 'application/json'
+                return {'error': 'shipment not found'}
     except:
         raise
 
@@ -110,12 +112,16 @@ def shipment_get_file_id(shipmentid):
             r = requests.get(''.join((env_repository_zenodo_host, '/deposit/depositions/', current_depot, '?access_token=', env_repository_zenodo_token)), headers=headers)
             if 'files' in r.json():
                 response.status = 200
+                response.content_type = 'application/json'
                 return json_dumps({'files': r.json()['files']})
             else:
                 response.status = 400
+                response.content_type = 'application/json'
                 return {'error': 'no files object in repository response'}
         elif db_find_recipient_from_shipment(shipmentid) == 'eudat':
-            pass
+            # todo: add eudat b2share
+            response.content_type = 'application/json'
+            return {'id': shipmentid, 'status': 'not yet implemented'}
         else:
             status_note('unknown recipient')
     except:
@@ -140,7 +146,9 @@ def shipment_put_publishment(shipmentid):
             else:
                 response.status = r.status_code
         elif db_find_recipient_from_shipment(shipmentid) == 'eudat':
-            pass
+            # todo: add eudat b2share
+            response.content_type = 'application/json'
+            return {'id': shipmentid, 'status': 'not yet implemented'}
         else:
             status_note('unknown recipient')
     except:
@@ -155,7 +163,9 @@ def shipment_del_file_id(shipmentid, fileid):
         if db_find_recipient_from_shipment(shipmentid) == 'zenodo':
             zenodo_del_from_depot(env_repository_zenodo_host, current_depot, fileid, env_repository_zenodo_token)
         elif db_find_recipient_from_shipment(shipmentid) == 'eudat':
-            pass
+            # todo: add eudat b2share
+            response.content_type = 'application/json'
+            return {'id': shipmentid, 'status': 'not yet implemented'}
         else:
             status_note('unknown recipient')
     except:
@@ -601,14 +611,6 @@ def xstr(s):
 
 # Main
 if __name__ == "__main__":
-    # my_version = 7  # update me! ## obsolete with microbadger build hash
-    # my_mod = ''
-    # try:
-    #    my_mod = datetime.fromtimestamp(os.stat(__file__).st_mtime)
-    # except OSError as exc:
-    #    status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
-    #    sys.exit(1)
-    # status_note(''.join(('v', str(my_version), ' - ', str(my_mod))))
     parser = argparse.ArgumentParser(description='shipper arguments')
     # args optional:
     parser.add_argument('-t', '--token', help='access token', required=False)
