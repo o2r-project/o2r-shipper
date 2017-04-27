@@ -155,6 +155,22 @@ def shipment_put_publishment(shipmentid):
         raise
 
 
+@app.route('/api/v1/shipment/<shipmentid>/publishment', method='GET')
+def shipment_get_publishment(shipmentid):
+    try:
+        current_depot = db_find_depotid_from_shipment(shipmentid)
+        if db_find_recipient_from_shipment(shipmentid) == 'zenodo':
+            zenodo_get_list_of_files_from_depot(env_repository_zenodo_host, current_depot, env_repository_zenodo_token)
+        elif db_find_recipient_from_shipment(shipmentid) == 'eudat':
+            # todo: add eudat b2share
+            response.content_type = 'application/json'
+            return {'id': shipmentid, 'status': 'not yet implemented'}
+        else:
+            status_note('unknown recipient')
+    except:
+        raise
+
+
 @app.route('/api/v1/shipment/<shipmentid>/files/<fileid>', method='DELETE')
 def shipment_del_file_id(shipmentid, fileid):
     # delete specific of a depot of a shipment

@@ -1,3 +1,5 @@
+[![](https://images.microbadger.com/badges/image/o2rproject/o2r-shipper.svg)](https://microbadger.com/images/o2rproject/o2r-shipper "Get your own image badge on microbadger.com")
+
 # o2r-shipper
 
 This is a micro service for the transmission of ERCs to external repositories.
@@ -40,8 +42,9 @@ Example:
 
 Please refer to the documentation available at:
 
-+ [https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md](https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md)
-+ [http://o2r.info/o2r-web-api/shipment/](http://o2r.info/o2r-web-api/shipment/)
++ [o2r-web-api](http://o2r.info/o2r-web-api/shipment/)
++ [[dev] o2r-web-api shipments](https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md)
+
 
 ## 3. Configuration
 
