@@ -197,6 +197,8 @@ def shipment_post_new():
         try:
             # prefer this if provided via request (for non-browser use and testing)
             cookie = request.forms.get('cookie')
+            if cookie is None:
+                cookie = request.get_cookie(env_cookie_name)
         except:
             cookie = request.get_cookie(env_cookie_name)
         if cookie is None:
