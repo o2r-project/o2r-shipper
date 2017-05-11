@@ -135,7 +135,8 @@ def shipment_put_publishment(shipmentid):
         current_depot = db_find_depotid_from_shipment(shipmentid)
         if db_find_recipient_from_shipment(shipmentid) == 'zenodo':
             r = requests.post(''.join((env_repository_zenodo_host, '/deposit/depositions/', current_depot, '/actions/publish?access_token=',
-                              env_repository_zenodo_token)))
+                                       env_repository_zenodo_token)))
+            status_note(' '.join((str(r.status_code), r.reason)))
             if r.status_code == 202:
                 db.shipments.update_one({'id': shipmentid}, {'$set': {'status': 'published'}}, upsert=True)
                 if 'doi_url' in r.json():
@@ -143,8 +144,6 @@ def shipment_put_publishment(shipmentid):
                 response.status = r.status_code
                 response.content_type = 'application/json'
                 return {'id': shipmentid, 'status': 'published'}
-            else:
-                response.status = r.status_code
         elif db_find_recipient_from_shipment(shipmentid) == 'eudat':
             # todo: add eudat b2share
             response.content_type = 'application/json'
@@ -361,7 +360,7 @@ def eudat_create_depot(base, access_token):
         # test md
         d = {"titles": [{"title": "TestRest"}], "community": "e9b9792e-79fb-4b07-b6b4-b9c2bd06d095", "open_access": True, "community_specific": {}}
         r = requests.post(base_url, data=json.dumps(d), headers=headers)
-        status_note(str(r.status_code) + " " + str(r.reason))
+        status_note(' '.join((str(r.status_code), r.reason)))
         status_note('[debug] ' + str(r.json()))
         status_note('created depot <' + r.json()['id'] + '>')
         return str(r.json()['id'])
@@ -376,11 +375,15 @@ def eudat_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
             # get bucket url:
             headers = {"Content-Type": "application/json"}
             r = requests.get(''.join((base, '/records/', deposition_id, '/draft?access_token=', token)), headers=headers)
-            bucket_url = r.json()['links']['files']
+            status_note(' '.join((str(r.status_code), r.reason)))
+            bucket_url = ''
             if r.status_code == 200:
-                status_note(str(r.status_code) + ' using bucket <' + bucket_url + '>')
+                if 'links' in r.json():
+                    if 'bucket' in r.json()['links']:
+                        bucket_url = r.json()['links']['bucket']
+                        status_note(''.join(('using bucket <', bucket_url, '>')))
             else:
-                status_note(r.status_code)
+                status_note(r.text)
             # upload file into bucket:
             headers = {"Content-Type": "application/octet-stream"}
             # create a filelike object in memory
@@ -393,11 +396,12 @@ def eudat_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
                     zipf.write(os.path.join(root, file), arcname=os.path.relpath(os.path.join(root, file), target_path))
             zipf.close()
             filelike.seek(0)
-            r = requests.put("".join((bucket_url, '/', zip_name, '?access_token=', token)), data=filelike.read(), headers=headers)
+            r = requests.put(''.join((bucket_url, '/', zip_name, '?access_token=', token)), data=filelike.read(), headers=headers)
+            status_note(' '.join((str(r.status_code), r.reason)))
             if r.status_code == 200:
                 status_note(''.join((str(r.status_code), ' uploaded file <', zip_name, '> to depot <', deposition_id, '> ', str(r.json()['checksum']))))
             else:
-                status_note(r.status_code)
+                status_note(r.text)
         else:
             status_note("! error: file not found")
     except Exception as exc:
@@ -412,7 +416,7 @@ def eudat_update_md(base, record_id, my_md, access_token):
         # test_md = [{"op": "add", "path": "/keywords", "value": ["keyword1", "keyword2"]}]
         headers = {"Content-Type": "application/json-patch+json"}
         r = requests.patch(base_url, data=json.dumps(my_md), headers=headers)
-        status_note(str(r.status_code) + " " + str(r.reason))
+        status_note(' '.join((str(r.status_code), r.reason)))
         status_note(str(r.json()))
     except:
         raise
@@ -424,8 +428,9 @@ def zenodo_create_depot(base, token):
         # create new empty upload depot:
         headers = {"Content-Type": "application/json"}
         r = requests.post(''.join((base, '/deposit/depositions/?access_token=', token)), data='{}', headers=headers)
+        status_note(' '.join((str(r.status_code), r.reason)))
         if r.status_code == 201:
-            status_note(''.join((str(r.status_code), ' created depot <', str(r.json()['id']),'>')))
+            status_note(''.join(('created depot <', str(r.json()['id']), '>')))
         else:
             status_note(r.status_code)
         # return id of newly created depot as response
@@ -444,11 +449,15 @@ def zenodo_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
             # get bucket url:
             headers = {"Content-Type": "application/json"}
             r = requests.get(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)), headers=headers)
-            bucket_url = r.json()['links']['bucket']
+            status_note(' '.join((str(r.status_code), r.reason)))
+            bucket_url = ''
             if r.status_code == 200:
-                status_note(str(r.status_code) + ' using bucket <' + bucket_url + '>')
+                if 'links' in r.json():
+                    if 'bucket' in r.json()['links']:
+                        bucket_url = r.json()['links']['bucket']
+                        status_note(''.join(('using bucket <', bucket_url, '>')))
             else:
-                status_note(r.status_code)
+                status_note(r.text)
             # upload file into bucket:
             headers = {"Content-Type": "application/octet-stream"}
             # create a filelike object in memory
@@ -461,13 +470,12 @@ def zenodo_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
                     zipf.write(os.path.join(root, file), arcname=os.path.relpath(os.path.join(root, file), target_path))
             zipf.close()
             filelike.seek(0)
-            r = requests.put("".join((bucket_url, '/', zip_name, '?access_token=', token)), data=filelike.read(), headers=headers)
+            r = requests.put(''.join((bucket_url, '/', zip_name, '?access_token=', token)), data=filelike.read(), headers=headers)
+            status_note(' '.join((str(r.status_code), r.reason)))
             if r.status_code == 200:
-                status_note(''.join((str(r.status_code), ' uploaded file <', zip_name, '> to depot <', deposition_id, '> ', str(r.json()['checksum']))))
-            else:
-                status_note(r.status_code)
+                status_note(''.join(('uploaded file <', zip_name, '> to depot <', deposition_id, '> ', str(r.json()['checksum']))))
         else:
-            status_note("! error: file not found")
+            status_note('! error: file not found')
     except Exception as exc:
         # raise
         status_note(''.join(('! error: ', exc.args[0])))
@@ -488,15 +496,17 @@ def zenodo_add_metadata(base, deposition_id, md, token):
         status_note('updating metadata ' + str(md)[:500])
         headers = {"Content-Type": "application/json"}
         r = requests.put(''.join((base, '/deposit/depositions/', str(deposition_id), '?access_token=', token)), data=json.dumps(md), headers=headers)
+        status_note(' '.join((str(r.status_code), r.reason)))
         if r.status_code == 200:
-            status_note(str(r.status_code) + ' updated metadata at <' + str(deposition_id) + '>')
+            status_note('updated metadata at <' + str(deposition_id) + '>')
         elif r.status_code == 400:
-            status_note(str(r.status_code) + ' ! failed to update metadata at <' + str(deposition_id) + '>. Possibly missing required elements or malformed MD-object.')
-            status_note(str(r.text))
+            status_note('! failed to update metadata at <' + str(deposition_id) + '>')
+            if 'message' in r.json() and 'errors' in r.json():
+                for err in r.json()['errors']:
+                    status_note(str(r.json()['message']) + ": " + str(err))
         elif r.status_code == 404:
-            status_note(str(r.status_code) + ' ! failed to update metadata at <' + str(deposition_id) + '>. URL path not found.')
+            status_note('! failed to update metadata at <' + str(deposition_id) + '>. URL path not found.')
         else:
-            status_note(str(r.status_code))
             status_note(str(r.text))
     except Exception as exc:
         #raise
@@ -520,18 +530,19 @@ def zenodo_get_list_of_files_from_depot(base, deposition_id, token):
         headers = {"Content-Type": "application/json"}
         r = requests.get(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)),
                          headers=headers)
-        file_list = r.json()['files']
+        status_note(' '.join((str(r.status_code), r.reason)))
         if r.status_code == 200:
-            status_note(str(r.status_code) + ". File list of depot " + str(deposition_id) + ":")
-            status_note(json.dumps(file_list))
+            if 'files' in r.json():
+                file_list = r.json()['files']
+                status_note('File list of depot' + str(deposition_id) + ':')
+                status_note(json.dumps(file_list))
         elif r.status_code == 403:
-            status_note(str(r.status_code) + ' ! insufficient access rights <' + str(
+            status_note(' ! insufficient access rights <' + str(
                 deposition_id) + '>. Cannot delete from an already published deposition.')
             status_note(str(r.text))
         elif r.status_code == 404:
-            status_note(str(r.status_code) + ' ! failed to retrieve file at <' + str(deposition_id) + '>')
+            status_note(' ! failed to retrieve file at <' + str(deposition_id) + '>')
         else:
-            status_note(str(r.status_code))
             status_note(str(r.text))
     except Exception as exc:
         raise
@@ -556,15 +567,15 @@ def zenodo_del_from_depot(base, deposition_id, file_id, token):
             file_id = r.json()['files'][0]['links']['self'].rsplit('/', 1)[-1]
         # make delete request for that file
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '/files/', file_id, '?access_token=', token)))
+        status_note(' '.join((str(r.status_code), r.reason)))
         if r.status_code == 204:
-            status_note(str(r.status_code) + ' deleted <' + file_id+ '> from <' + str(deposition_id) + '>')
+            status_note('deleted <' + file_id+ '> from <' + str(deposition_id) + '>')
         elif r.status_code == 403:
-            status_note(str(r.status_code) + ' ! insufficient access rights <' + str(deposition_id) + '>. Cannot delete from an already published deposition.')
+            status_note('! insufficient access rights <' + str(deposition_id) + '>. Cannot delete from an already published deposition.')
             status_note(str(r.text))
         elif r.status_code == 404:
-            status_note(str(r.status_code) + ' ! failed to retrieve file at <' + str(deposition_id) + '>')
+            status_note('failed to retrieve file at >' + str(deposition_id) + '>')
         else:
-            status_note(str(r.status_code))
             status_note(str(r.text))
     except Exception as exc:
         raise
@@ -575,8 +586,9 @@ def zenodo_del_depot(base, deposition_id, token):
     # DELETE /api/deposit/depositions/:id
     try:
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)))
+        status_note(' '.join((str(r.status_code), r.reason)))
         if r.status_code == 204:
-            status_note(''.join((str(r.status_code), ' deleted depot <', deposition_id, '>')))
+            status_note(''.join(('deleted depot <', deposition_id, '>')))
         else:
             status_note(r.status_code)
     except Exception as exc:
