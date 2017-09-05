@@ -18,6 +18,7 @@
 
 import ast
 import argparse
+import bagit
 import base64
 import hashlib
 import hmac
@@ -615,6 +616,42 @@ def db_find_depotid_from_shipment(shipmentid):
 
 
 # File interaction
+def files_make_bag(filepath):
+    logging.getLogger('bagit').setLevel(logging.CRITICAL)
+    try:
+        bag = bagit.make_bag(filepath, {'Contact-Name': 'o2r.info'})
+        bag.save()
+        status_note("bag written")
+    except bagit.BagValidationError as e:
+        status_note(str(e.details))
+
+
+def files_validate_zip_bag(filepath):
+    logging.getLogger('bagit').setLevel(logging.CRITICAL)
+    cache_path = os.path.join(os.path.dirname(filepath), 'cache')
+    if not os.path.exists(cache_path):
+        os.makedirs(cache_path)
+    #else:
+        #delete all files in cache
+    with zipfile.ZipFile(filepath, "r") as zip_ref:
+        zip_ref.extractall(cache_path)
+        extracted_path = cache_path
+        # upd path if dir in top level in zipfile
+        if zip_ref.namelist is not None:
+            if os.path.exists(os.path.join(cache_path, zip_ref.namelist()[0])):
+                extracted_path = os.path.join(cache_path, zip_ref.namelist()[0])
+    try:
+        bag = bagit.Bag(extracted_path)
+        bag.validate()
+        if bag.is_valid():
+            return True
+        else:
+            return False
+    except bagit.BagValidationError as e:
+        status_note(str(e.details))
+        return False #error renders false, too
+
+
 def files_recursive_gen(start_path, gen_paths):
     for entry in os.scandir(start_path):
         if entry.is_dir(follow_symlinks=False):
