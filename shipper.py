@@ -234,7 +234,6 @@ def shipment_post_new():
                     'status': 'shipped',
                     'md': new_md
                     }
-            #db['shipments'].save(data)  # deprecated (pymongo)
             current_mongo_doc = db.shipments.insert_one(data)
             status_note('created shipment object ' + str(current_mongo_doc.inserted_id))
             status = 200
@@ -254,29 +253,55 @@ def shipment_post_new():
                             try:
                                 bag = bagit.Bag(compendium_files)
                                 bag.validate()
+                                status_note(''.join(('Valid bagit bag at <', str(data['compendium_id']), '>')))
                             except bagit.BagValidationError as e:
+                                status_note(''.join(('! Invalid bagit bag at <', str(data['compendium_id']), '>')))
                                 details = []
                                 for d in e.details:
                                     details.append(str(d))
-                                status_note(str(details))
+                                    status_note(str(d))
                                 # Exit point for invalid not to be repaired bags
-                                if data['update_packaging'] is not True:
-                                        data['status'] = 'error'
-                                        response.status = 400
-                                        response.content_type = 'application/json'
-                                        return json.dumps({'error': str(details)})
-                            # Open bag object and update:
-                            try:
-                                bag = bagit.Bag(compendium_files)
-                                bag.save(manifests=True)
-                            except bagit.BagValidationError as e:
-                                status_note("! error while bagging: " + str(e.details))
+                                if not data['update_packaging'] in ['true', 'True', 't', '1']:
+                                    data['status'] = 'error'
+                                    # update shipment data in database
+                                    db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                    response.status = 400
+                                    response.content_type = 'application/json'
+                                    return json.dumps({'error': str(details)})
+                                else:
+                                    status_note('Updating bagit bag...')
+                                    # Open bag object and update:
+                                    try:
+                                        bag = bagit.Bag(compendium_files)
+                                        bag.save(manifests=True)
+                                        # Validate a second time to ensure successful update:
+                                        try:
+                                            bag.validate()
+                                            status_note(''.join(('Valid updated bagit bag at <', str(data['compendium_id']), '>')))
+                                        except bagit.BagValidationError:
+                                            status_note('! error while validating updated bag')
+                                            data['status'] = 'error'
+                                            # update shipment data in database
+                                            db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                            response.status = 400
+                                            response.content_type = 'application/json'
+                                            return json.dumps({'error': 'unable to validate updated bag'})
+                                    except Exception as e:
+                                        status_note("! error while bagging: " + str(e))
                         elif compendium_state == 2:
                             # Case: dir is no bagit bag, needs to become a bag first
-                            files_make_bag(compendium_files)
+                            try:
+                                bag = bagit.make_bag(compendium_files)
+                                bag.save()
+                                status_note('New bagit bag written')
+                            except Exception as e:
+                                status_note("! error while bagging: " + str(e))
+                        #elif compendium_state == 3: # would be dealing with zip files...
                     else:
                         status_note('! error, invalid path to compendium: ' + compendium_files)
                         data['status'] = 'error'
+                        # update shipment data in database
+                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
                         response.status = 400
                         response.content_type = 'application/json'
                         return json.dumps({'error': 'invalid path to compendium'})
@@ -304,7 +329,6 @@ def shipment_post_new():
                                 eudat_update_md(env_repository_eudat_host, data['deposition_id'], md, env_repository_eudat_token)
 
             # update shipment data in database
-            #db['shipments'].save(data)  # deprecated (pymongo)
             db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
             status_note('updated shipment object ' + str(current_mongo_doc.inserted_id))
             # build and send response
@@ -671,29 +695,6 @@ def files_scan_path(filepath):
         raise
 
 
-def files_make_bag(filepath):
-    logging.getLogger('bagit').setLevel(logging.CRITICAL)
-    try:
-        bag = bagit.make_bag(filepath, {'Executable Research Compendium': 'True'})
-        bag.save()
-        status_note('bag written')
-    except bagit.BagValidationError as e:
-        status_note(str(e.details))
-        raise
-
-
-def files_is_valid_bag(filepath):
-    logging.getLogger('bagit').setLevel(logging.CRITICAL)
-    try:
-        bag = bagit.Bag(filepath)
-        bag.validate()
-        if bag.is_valid():
-            return True
-        else:
-            return False
-    except bagit.BagValidationError as e:
-            for d in e.details:
-                status_note(str(d))
 
 
 def files_recursive_gen(start_path, gen_paths):
