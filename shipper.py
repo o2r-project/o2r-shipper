@@ -227,6 +227,7 @@ def shipment_post_new():
                     'compendium_id': request.forms.get('compendium_id'),
                     'deposition_id': request.forms.get('deposition_id'),
                     'deposition_url': request.forms.get('deposition_url'),
+                    'update_packaging': request.forms.get('update_packaging'),
                     'recipient': request.forms.get('recipient'),
                     'last_modified': str(datetime.now()),
                     'user': user_entitled,
@@ -242,43 +243,66 @@ def shipment_post_new():
                 current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
                 if current_compendium:
                     # Aquire path to files via env var and id:
-                    compendium_files = os.path.join(env_compendium_files, data['compendium_id'])
+                    compendium_files = os.path.normpath(os.path.join(env_compendium_files, data['compendium_id']))
                     # Determine state of that compendium: Is is a bag or not, zipped, valid, etc:
                     compendium_state = files_scan_path(compendium_files)
                     if not compendium_state == 0:
+                        # Case path does not exist:
                         if compendium_state == 1:
-                            # Check bagit validity
-                            if not files_is_valid_bag(compendium_files):
-                                status = 400
+                            # Case: Is a bagit bag:
+                            logging.getLogger('bagit').setLevel(logging.CRITICAL)
+                            try:
+                                bag = bagit.Bag(compendium_files)
+                                bag.validate()
+                            except bagit.BagValidationError as e:
+                                details = []
+                                for d in e.details:
+                                    details.append(str(d))
+                                status_note(str(details))
+                                # Exit point for invalid not to be repaired bags
+                                if data['update_packaging'] is not True:
+                                        data['status'] = 'error'
+                                        response.status = 400
+                                        response.content_type = 'application/json'
+                                        return json.dumps({'error': str(details)})
+                            # Open bag object and update:
+                            try:
+                                bag = bagit.Bag(compendium_files)
+                                bag.save(manifests=True)
+                            except bagit.BagValidationError as e:
+                                status_note("! error while bagging: " + str(e.details))
                         elif compendium_state == 2:
-                            # needs to become a bag first
+                            # Case: dir is no bagit bag, needs to become a bag first
                             files_make_bag(compendium_files)
-                            # and zip
-                            file_name = '.'.join((str(data['compendium_id']), 'zip'))
-                            if data['recipient'] == 'zenodo':
-                                data['deposition_id'] = zenodo_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
-                                data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'deposit/'), data['deposition_id']))
-                                # zip all files in dir and submit as zip:
-                                zenodo_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
-                                # Add metadata that are in compendium in db:
-                                if 'metadata' in current_compendium:
-                                    if 'zenodo' in current_compendium['metadata']:
-                                        md = current_compendium['metadata']['zenodo']
-                                        zenodo_add_metadata(env_repository_zenodo_host, data['deposition_id'], md,
-                                                            env_repository_zenodo_token)
-                            elif data['recipient'] == 'eudat':
-                                data['deposition_id'] = eudat_create_depot(env_repository_eudat_host, env_repository_eudat_token)
-                                data['deposition_url'] = ''.join((env_repository_eudat_host.replace('api', 'records/'), data['deposition_id']))
-                                eudat_add_zip_to_depot(env_repository_eudat_host, data['deposition_id'], file_name, compendium_files, env_repository_eudat_token)
-                                # Add metadata that are in compendium in db:
-                                if 'metadata' in current_compendium:
-                                    if 'eudat' in current_compendium['metadata']:
-                                        md = current_compendium['metadata']['eudat']
-                                        eudat_update_md(env_repository_eudat_host, data['deposition_id'], md, env_repository_eudat_token)
                     else:
                         status_note('! error, invalid path to compendium: ' + compendium_files)
                         data['status'] = 'error'
-                        status = 400
+                        response.status = 400
+                        response.content_type = 'application/json'
+                        return json.dumps({'error': 'invalid path to compendium'})
+                    # Continue with zipping and upload
+                    file_name = '.'.join((str(data['compendium_id']), 'zip'))
+                    if data['recipient'] == 'zenodo':
+                        data['deposition_id'] = zenodo_create_depot(env_repository_zenodo_host, env_repository_zenodo_token)
+                        data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'deposit/'), data['deposition_id']))
+                        # zip all files in dir and submit as zip:
+                        zenodo_add_zip_to_depot(env_repository_zenodo_host, data['deposition_id'], file_name, compendium_files, env_repository_zenodo_token)
+                        # Add metadata that are in compendium in db:
+                        if 'metadata' in current_compendium:
+                            if 'zenodo' in current_compendium['metadata']:
+                                md = current_compendium['metadata']['zenodo']
+                                zenodo_add_metadata(env_repository_zenodo_host, data['deposition_id'], md,
+                                                    env_repository_zenodo_token)
+                    elif data['recipient'] == 'eudat':
+                        data['deposition_id'] = eudat_create_depot(env_repository_eudat_host, env_repository_eudat_token)
+                        data['deposition_url'] = ''.join((env_repository_eudat_host.replace('api', 'records/'), data['deposition_id']))
+                        eudat_add_zip_to_depot(env_repository_eudat_host, data['deposition_id'], file_name, compendium_files, env_repository_eudat_token)
+                        # Add metadata that are in compendium in db:
+                        if 'metadata' in current_compendium:
+                            if 'eudat' in current_compendium['metadata']:
+                                md = current_compendium['metadata']['eudat']
+                                eudat_update_md(env_repository_eudat_host, data['deposition_id'], md, env_repository_eudat_token)
+
             # update shipment data in database
             #db['shipments'].save(data)  # deprecated (pymongo)
             db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
@@ -642,7 +666,6 @@ def files_scan_path(filepath):
         #for fname in os.listdir('.'):
         #   if fname.endswith('.zip'):
         #   return 3
-        return None
     except:
         print('error while scanning path')
         raise
@@ -651,37 +674,26 @@ def files_scan_path(filepath):
 def files_make_bag(filepath):
     logging.getLogger('bagit').setLevel(logging.CRITICAL)
     try:
-        bag = bagit.make_bag(filepath, {'Contact-Name': 'o2r.info'})
+        bag = bagit.make_bag(filepath, {'Executable Research Compendium': 'True'})
         bag.save()
         status_note('bag written')
     except bagit.BagValidationError as e:
         status_note(str(e.details))
+        raise
 
 
 def files_is_valid_bag(filepath):
     logging.getLogger('bagit').setLevel(logging.CRITICAL)
-    cache_path = os.path.join(os.path.dirname(filepath), 'cache')
-    if not os.path.exists(cache_path):
-        os.makedirs(cache_path)
-    #else:
-        #delete all files in cache
-    with zipfile.ZipFile(filepath, "r") as zip_ref:
-        zip_ref.extractall(cache_path)
-        extracted_path = cache_path
-        # upd path if dir in top level in zipfile
-        if zip_ref.namelist is not None:
-            if os.path.exists(os.path.join(cache_path, zip_ref.namelist()[0])):
-                extracted_path = os.path.join(cache_path, zip_ref.namelist()[0])
     try:
-        bag = bagit.Bag(extracted_path)
+        bag = bagit.Bag(filepath)
         bag.validate()
         if bag.is_valid():
             return True
         else:
             return False
     except bagit.BagValidationError as e:
-        status_note(str(e.details))
-        return False #error renders false, too
+            for d in e.details:
+                status_note(str(d))
 
 
 def files_recursive_gen(start_path, gen_paths):
