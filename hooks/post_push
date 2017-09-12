@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+VCS_REF=`git rev-parse --short HEAD`
+echo Add version tag using git short rev $VCS_REF
+
+docker tag $IMAGE_NAME $DOCKER_REPO:$VCS_REF
+docker push $DOCKER_REPO:$VCS_REF
