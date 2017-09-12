@@ -41,6 +41,7 @@ from requestlogger import WSGILogger, ApacheFormatter
 
 # Bottle
 app = Bottle()
+logging.getLogger('bagit').setLevel(logging.CRITICAL)
 
 @app.hook('before_request')
 def strip_path():
@@ -48,7 +49,7 @@ def strip_path():
     try:
         request.environ['PATH_INFO'] = request.environ['PATH_INFO'].rstrip('/')
     except Exception as exc:
-        status_note(''.join(('! error: ', exc.args[0])))
+        status_note(['! error: ', xstr(exc.args[0])])
 
 
 @app.route('/api/v1/shipment/<name>', method='GET')
@@ -61,7 +62,7 @@ def shipment_get_one(name):
             data.pop('_id', None)
         return json.dumps(data)
     else:
-        status_note(''.join(('user requested non-existing shipment ', name)))
+        status_note(['user requested non-existing shipment ', name])
         response.status = 404
         response.content_type = 'application/json'
         return json.dumps({'error': 'a compendium with that id does not exist'})
@@ -137,7 +138,7 @@ def shipment_put_publishment(shipmentid):
         if db_find_recipient_from_shipment(shipmentid) == 'zenodo':
             r = requests.post(''.join((env_repository_zenodo_host, '/deposit/depositions/', current_depot, '/actions/publish?access_token=',
                                        env_repository_zenodo_token)))
-            status_note(' '.join((str(r.status_code), r.reason)))
+            status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 202:
                 db.shipments.update_one({'id': shipmentid}, {'$set': {'status': 'published'}}, upsert=True)
                 if 'doi_url' in r.json():
@@ -202,13 +203,13 @@ def shipment_post_new():
         except:
             cookie = request.get_cookie(env_cookie_name)
         if cookie is None:
-            status_note(''.join(('cookie <', env_cookie_name, '> cannot be found!')))
+            status_note(['cookie <', env_cookie_name, '> cannot be found!'])
             response.status = 400
             response.content_type = 'application/json'
             return json.dumps({'error': 'bad request: authentication cookie is missing'})
         cookie = urllib.parse.unquote(cookie)
         user_entitled = session_user_entitled(cookie, env_user_level_min)
-        status_note(''.join(('validating session with cookie <', cookie, '> and minimum level ', str(env_user_level_min), '. found user <', str(user_entitled), '>')))
+        status_note(['validating session with cookie <', cookie, '> and minimum level ', str(env_user_level_min), '. found user <', str(user_entitled), '>'])
         if user_entitled:
             # get shipment id
             new_id = request.forms.get('_id')
@@ -235,7 +236,7 @@ def shipment_post_new():
                     'md': new_md
                     }
             current_mongo_doc = db.shipments.insert_one(data)
-            status_note('created shipment object ' + str(current_mongo_doc.inserted_id))
+            status_note(['created shipment object ', str(current_mongo_doc.inserted_id)])
             status = 200
             if not data['deposition_id']:
                 # no depot yet, go create one
@@ -249,19 +250,18 @@ def shipment_post_new():
                         # Case path does not exist:
                         if compendium_state == 1:
                             # Case: Is a bagit bag:
-                            logging.getLogger('bagit').setLevel(logging.CRITICAL)
                             try:
                                 bag = bagit.Bag(compendium_files)
                                 bag.validate()
-                                status_note(''.join(('Valid bagit bag at <', str(data['compendium_id']), '>')))
+                                status_note(['Valid bagit bag at <', str(data['compendium_id']), '>'])
                             except bagit.BagValidationError as e:
-                                status_note(''.join(('! Invalid bagit bag at <', str(data['compendium_id']), '>')))
+                                status_note(['! Invalid bagit bag at <', str(data['compendium_id']), '>'])
                                 details = []
                                 for d in e.details:
                                     details.append(str(d))
                                     status_note(str(d))
                                 # Exit point for invalid not to be repaired bags
-                                if not data['update_packaging'] in ['true', 'True', 't', '1']:
+                                if not strtobool(data['update_packaging']):
                                     data['status'] = 'error'
                                     # update shipment data in database
                                     db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
@@ -277,7 +277,7 @@ def shipment_post_new():
                                         # Validate a second time to ensure successful update:
                                         try:
                                             bag.validate()
-                                            status_note(''.join(('Valid updated bagit bag at <', str(data['compendium_id']), '>')))
+                                            status_note(['Valid updated bagit bag at <', str(data['compendium_id']), '>'])
                                         except bagit.BagValidationError:
                                             status_note('! error while validating updated bag')
                                             data['status'] = 'error'
@@ -287,7 +287,7 @@ def shipment_post_new():
                                             response.content_type = 'application/json'
                                             return json.dumps({'error': 'unable to validate updated bag'})
                                     except Exception as e:
-                                        status_note("! error while bagging: " + str(e))
+                                        status_note(['! error while bagging: ', str(e)])
                         elif compendium_state == 2:
                             # Case: dir is no bagit bag, needs to become a bag first
                             try:
@@ -295,10 +295,10 @@ def shipment_post_new():
                                 bag.save()
                                 status_note('New bagit bag written')
                             except Exception as e:
-                                status_note("! error while bagging: " + str(e))
+                                status_note(['! error while bagging: ' , str(e)])
                         #elif compendium_state == 3: # would be dealing with zip files...
                     else:
-                        status_note('! error, invalid path to compendium: ' + compendium_files)
+                        status_note(['! error, invalid path to compendium: ', compendium_files])
                         data['status'] = 'error'
                         # update shipment data in database
                         db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
@@ -330,7 +330,7 @@ def shipment_post_new():
 
             # update shipment data in database
             db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-            status_note('updated shipment object ' + str(current_mongo_doc.inserted_id))
+            status_note(['updated shipment object ', str(current_mongo_doc.inserted_id)])
             # build and send response
             response.status = status
             response.content_type = 'application/json'
@@ -347,13 +347,13 @@ def shipment_post_new():
             return json.dumps({'error': 'insufficient permissions (not logged in?)'})
     except requests.exceptions.RequestException as exc:
         raise  # debug
-        status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
+        status_note(['! error: ', exc.args[0], '\n', traceback.format_exc()])
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
     except Exception as exc:
         raise  # debug
-        status_note(''.join(('! error: ', exc.args[0], '\n', traceback.format_exc())))
+        status_note(['! error: ', exc.args[0], '\n', traceback.format_exc()])
         message = ''.join('bad request:', exc.args[0])
         response.status = 500
         response.content_type = 'application/json'
@@ -371,13 +371,13 @@ def session_get_cookie(val, secret):
         return cookie
     except Exception as exc:
         #raise
-        status_note(''.join(('! error: ', exc.args[0])))
+        status_note(['! error: ', exc.args[0]])
 
 
 def session_get_user(cookie, my_db):
     session_id = cookie.split('.')[0].split('s:')[1]
     if not session_id:
-        status_note(''.join(('no session found for cookie "', cookie, '"')))
+        status_note(['no session found for cookie <', xstr(cookie), '>'])
         return None
     if hmac.compare_digest(cookie, session_get_cookie(session_id, env_session_secret)):
         sessions = my_db['sessions']
@@ -388,7 +388,7 @@ def session_get_user(cookie, my_db):
             return user_doc['orcid']
         except Exception as exc:
             # raise
-            status_note(''.join(('! error: ', exc.args[0])))
+            status_note(['! error: ', str(exc.args[0])])
     else:
         return None
 
@@ -397,10 +397,10 @@ def session_user_entitled(cookie, min_lvl):
     if cookie:
         user_orcid = session_get_user(cookie, db)
         if not user_orcid:
-            status_note(''.join(('No orcid found for cookie "', xstr(cookie))))
+            status_note(['no orcid found for cookie <', xstr(cookie), '>'])
             return None
         this_user = db['users'].find_one({'orcid': user_orcid})
-        status_note(''.join(('found user <', xstr(this_user), '> for orcid ', user_orcid)))
+        status_note(['found user <', xstr(this_user), '> for orcid ', user_orcid])
         if this_user:
             if this_user['level'] >= min_lvl:
                 return this_user['orcid']
@@ -420,9 +420,9 @@ def eudat_create_depot(base, access_token):
         # test md
         d = {"titles": [{"title": "TestRest"}], "community": "e9b9792e-79fb-4b07-b6b4-b9c2bd06d095", "open_access": True, "community_specific": {}}
         r = requests.post(base_url, data=json.dumps(d), headers=headers)
-        status_note(' '.join((str(r.status_code), r.reason)))
-        status_note('[debug] ' + str(r.json()))
-        status_note('created depot <' + r.json()['id'] + '>')
+        status_note([xstr(r.status_code), ' ', xstr(r.reason)])
+        status_note(['[debug] ', xstr(r.json())])  # debug
+        status_note(['created depot <', xstr(r.json()['id']), '>'])
         return str(r.json()['id'])
     except:
         raise
@@ -435,15 +435,15 @@ def eudat_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
             # get bucket url:
             headers = {"Content-Type": "application/json"}
             r = requests.get(''.join((base, '/records/', deposition_id, '/draft?access_token=', token)), headers=headers)
-            status_note(' '.join((str(r.status_code), r.reason)))
+            status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             bucket_url = ''
             if r.status_code == 200:
                 if 'links' in r.json():
                     if 'bucket' in r.json()['links']:
                         bucket_url = r.json()['links']['bucket']
-                        status_note(''.join(('using bucket <', bucket_url, '>')))
+                        status_note(['using bucket <', bucket_url, '>'])
             else:
-                status_note(r.text)
+                status_note(xstr(r.text))
             # upload file into bucket:
             headers = {"Content-Type": "application/octet-stream"}
             # create a filelike object in memory
@@ -457,16 +457,16 @@ def eudat_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
             zipf.close()
             filelike.seek(0)
             r = requests.put(''.join((bucket_url, '/', zip_name, '?access_token=', token)), data=filelike.read(), headers=headers)
-            status_note(' '.join((str(r.status_code), r.reason)))
+            status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
-                status_note(''.join((str(r.status_code), ' uploaded file <', zip_name, '> to depot <', deposition_id, '> ', str(r.json()['checksum']))))
+                status_note([xstr(r.status_code), ' uploaded file <', zip_name, '> to depot <', deposition_id, '> ', xstr(r.json()['checksum'])])
             else:
-                status_note(r.text)
+                status_note(xstr(r.text))
         else:
             status_note("! error: file not found")
     except Exception as exc:
         # raise
-        status_note(''.join(('! error: ', exc.args[0])))
+        status_note(['! error: ', xstr(exc.args[0])])
 
 
 def eudat_update_md(base, record_id, my_md, access_token):
@@ -476,8 +476,8 @@ def eudat_update_md(base, record_id, my_md, access_token):
         # test_md = [{"op": "add", "path": "/keywords", "value": ["keyword1", "keyword2"]}]
         headers = {"Content-Type": "application/json-patch+json"}
         r = requests.patch(base_url, data=json.dumps(my_md), headers=headers)
-        status_note(' '.join((str(r.status_code), r.reason)))
-        status_note(str(r.json()))
+        status_note([xstr(r.status_code), ' ', xstr(r.reason)])
+        status_note(xstr(r.json()))
     except:
         raise
 
@@ -488,18 +488,18 @@ def zenodo_create_depot(base, token):
         # create new empty upload depot:
         headers = {"Content-Type": "application/json"}
         r = requests.post(''.join((base, '/deposit/depositions/?access_token=', token)), data='{}', headers=headers)
-        status_note(' '.join((str(r.status_code), r.reason)))
+        status_note([xstr(r.status_code), ' ', xstr(r.reason)])
         if r.status_code == 201:
-            status_note(''.join(('created depot <', str(r.json()['id']), '>')))
+            status_note(['created depot <', xstr(r.json()['id']), '>'])
         else:
-            status_note(r.status_code)
+            status_note(xstr(r.status_code))
         # return id of newly created depot as response
         return str(r.json()['id'])
     except requests.exceptions.Timeout:
-        status_note('server at <'+base+'> timed out')
+        status_note(['server at <', xstr(base), '> timed out'])
     except Exception as exc:
         # raise
-        status_note(''.join(('! error: ', exc.args[0])))
+        status_note(['! error: ', xstr(exc.args[0])])
 
 
 def zenodo_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
@@ -509,15 +509,15 @@ def zenodo_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
             # get bucket url:
             headers = {"Content-Type": "application/json"}
             r = requests.get(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)), headers=headers)
-            status_note(' '.join((str(r.status_code), r.reason)))
+            status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             bucket_url = ''
             if r.status_code == 200:
                 if 'links' in r.json():
                     if 'bucket' in r.json()['links']:
                         bucket_url = r.json()['links']['bucket']
-                        status_note(''.join(('using bucket <', bucket_url, '>')))
+                        status_note(['using bucket <', bucket_url, '>'])
             else:
-                status_note(r.text)
+                status_note(xstr(r.text))
             # upload file into bucket:
             headers = {"Content-Type": "application/octet-stream"}
             # create a filelike object in memory
@@ -531,14 +531,14 @@ def zenodo_add_zip_to_depot(base, deposition_id, zip_name, target_path, token):
             zipf.close()
             filelike.seek(0)
             r = requests.put(''.join((bucket_url, '/', zip_name, '?access_token=', token)), data=filelike.read(), headers=headers)
-            status_note(' '.join((str(r.status_code), r.reason)))
+            status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
-                status_note(''.join(('uploaded file <', zip_name, '> to depot <', deposition_id, '> ', str(r.json()['checksum']))))
+                status_note(['uploaded file <', zip_name, '> to depot <', deposition_id, '> ', str(r.json()['checksum'])])
         else:
             status_note('! error: file not found')
     except Exception as exc:
         # raise
-        status_note(''.join(('! error: ', exc.args[0])))
+        status_note(['! error: ', xstr(exc.args[0])])
 
 
 def zenodo_add_files_to_depot(target_path):
@@ -556,30 +556,30 @@ def zenodo_add_metadata(base, deposition_id, md, token):
         status_note('updating metadata ' + str(md)[:500])
         headers = {"Content-Type": "application/json"}
         r = requests.put(''.join((base, '/deposit/depositions/', str(deposition_id), '?access_token=', token)), data=json.dumps(md), headers=headers)
-        status_note(' '.join((str(r.status_code), r.reason)))
+        status_note([xstr(r.status_code), ' ', xstr(r.reason)])
         if r.status_code == 200:
-            status_note('updated metadata at <' + str(deposition_id) + '>')
+            status_note(['updated metadata at <', str(deposition_id), '>'])
         elif r.status_code == 400:
-            status_note('! failed to update metadata at <' + str(deposition_id) + '>')
+            status_note(['! failed to update metadata at <', str(deposition_id), '>'])
             if 'message' in r.json() and 'errors' in r.json():
                 for err in r.json()['errors']:
-                    status_note(str(r.json()['message']) + ": " + str(err))
+                    status_note([xstr(r.json()['message']), ': ', xstr(err)])
         elif r.status_code == 404:
-            status_note('! failed to update metadata at <' + str(deposition_id) + '>. URL path not found.')
+            status_note(['! failed to update metadata at <', xstr(deposition_id), '>. URL path not found.'])
         else:
-            status_note(str(r.text))
+            status_note(xstr(r.text))
     except Exception as exc:
         #raise
-        status_note(''.join(('! failed to submit metadata: ', exc.args[0])))
+        status_note(['! failed to submit metadata: ', xstr(exc.args[0])])
 
 
 def zenodo_create_empty_depot(base, deposition_id, token):
     try:
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)))
         if r.status_code == 204:
-            status_note(''.join((str(r.status_code), ' removed depot <', deposition_id, '>')))
+            status_note([xstr(r.status_code), ' removed depot <', deposition_id, '>'])
         else:
-            status_note(r.status_code)
+            status_note(xstr(r.status_code))
     except Exception as exc:
         raise
 
@@ -590,23 +590,21 @@ def zenodo_get_list_of_files_from_depot(base, deposition_id, token):
         headers = {"Content-Type": "application/json"}
         r = requests.get(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)),
                          headers=headers)
-        status_note(' '.join((str(r.status_code), r.reason)))
+        status_note([xstr(r.status_code), ' ', xstr(r.reason)])
         if r.status_code == 200:
             if 'files' in r.json():
                 file_list = r.json()['files']
-                status_note('File list of depot' + str(deposition_id) + ':')
-                status_note(json.dumps(file_list))
+                status_note(['File list of depot', str(deposition_id), ':'])
+                status_note(xstr(json.dumps(file_list)))
         elif r.status_code == 403:
-            status_note(' ! insufficient access rights <' + str(
-                deposition_id) + '>. Cannot delete from an already published deposition.')
-            status_note(str(r.text))
+            status_note(['! insufficient access rights <', str(deposition_id), '>. Cannot delete from an already published deposition.'])
+            status_note(xstr(r.text))
         elif r.status_code == 404:
-            status_note(' ! failed to retrieve file at <' + str(deposition_id) + '>')
+            status_note(['! failed to retrieve file at <', str(deposition_id), '>'])
         else:
-            status_note(str(r.text))
+            status_note(xstr(r.text))
     except Exception as exc:
         raise
-        # status_note(''.join(('! error: ', exc.args[0])))
 
 
 def zenodo_del_from_depot(base, deposition_id, file_id, token):
@@ -616,7 +614,7 @@ def zenodo_del_from_depot(base, deposition_id, file_id, token):
     # DELETE /api/deposit/depositions/:id/files/:file_id
     try:
         # get file id from bucket url:
-        status_note(''.join(('attempting to delete from <', deposition_id, '>')))
+        status_note(['attempting to delete from <', deposition_id, '>'])
         headers = {"Content-Type": "application/json"}
         r = requests.get(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)),
                          headers=headers)
@@ -627,33 +625,31 @@ def zenodo_del_from_depot(base, deposition_id, file_id, token):
             file_id = r.json()['files'][0]['links']['self'].rsplit('/', 1)[-1]
         # make delete request for that file
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '/files/', file_id, '?access_token=', token)))
-        status_note(' '.join((str(r.status_code), r.reason)))
+        status_note([xstr(r.status_code), ' ', xstr(r.reason)])
         if r.status_code == 204:
-            status_note('deleted <' + file_id+ '> from <' + str(deposition_id) + '>')
+            status_note(['deleted <', xstr(file_id), '> from <', str(deposition_id), '>'])
         elif r.status_code == 403:
-            status_note('! insufficient access rights <' + str(deposition_id) + '>. Cannot delete from an already published deposition.')
-            status_note(str(r.text))
+            status_note(['! insufficient access rights <', str(deposition_id), '>. Cannot delete from an already published deposition.'])
+            status_note(xstr(r.text))
         elif r.status_code == 404:
-            status_note('failed to retrieve file at >' + str(deposition_id) + '>')
+            status_note(['failed to retrieve file at >', str(deposition_id), '>'])
         else:
-            status_note(str(r.text))
+            status_note(xstr(r.text))
     except Exception as exc:
         raise
-        #status_note(''.join(('! error: ', exc.args[0])))
 
 
 def zenodo_del_depot(base, deposition_id, token):
     # DELETE /api/deposit/depositions/:id
     try:
         r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '?access_token=', token)))
-        status_note(' '.join((str(r.status_code), r.reason)))
+        status_note([xstr(r.status_code), ' ', xstr(r.reason)])
         if r.status_code == 204:
-            status_note(''.join(('deleted depot <', deposition_id, '>')))
+            status_note(['deleted depot <', deposition_id, '>'])
         else:
-            status_note(r.status_code)
+            status_note(xstr(r.status_code))
     except Exception as exc:
         raise
-        #status_note(''.join(('! error: ', exc.args[0])))
 
 
 def db_find_recipient_from_shipment(shipmentid):
@@ -714,11 +710,21 @@ def files_dir_size(my_path):
 
 # Self
 def status_note(msgtxt):
-    print(''.join(('[shipper] ', str(msgtxt))))
+    if type(msgtxt) not in [list, str, dict]:
+        msgtxt = str(msgtxt)
+    if type(msgtxt) is list:
+        msgtxt = ''.join(msgtxt)
+    print(''.join(('[shipper] ', msgtxt)))
 
-
+# Helpers
 def xstr(s):
     return '' if s is None else str(s)
+
+def strtobool(s):
+    if s.lower() in ['true', 't', 'yes', 'y', '1']:
+         return True
+    else:
+        return False
 
 
 # Main
@@ -730,7 +736,7 @@ if __name__ == "__main__":
     # args parsed:
     args = vars(parser.parse_args())
     arg_test_mode = args['testmode']
-    status_note(''.join(('args: ', str(args))))
+    status_note(['args: ', xstr(args)])
     # environment vars and defaults
     try:
         with open('config.json') as data_file:
@@ -754,29 +760,29 @@ if __name__ == "__main__":
         env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
         env_compendium_files = os.path.join(env_file_base_path, 'compendium')
         env_user_id = None
-        status_note(''.join(('loaded config and env:', '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name, '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port))))
+        status_note(['loaded config and env:', '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name, '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port)])
     except:
         raise
     # connect to db
     try:
-        status_note('connecting to ' + str(env_mongo_host))
+        status_note(['connecting to ', str(env_mongo_host)])
         client = MongoClient(env_mongo_host, serverSelectionTimeoutMS=12000)
         db = client[env_mongo_db_name]
-        status_note('connected. MongoDB server version: ' + str(client.server_info()['version']))
+        status_note(['connected. MongoDB server version: ', str(client.server_info()['version'])])
     except errors.ServerSelectionTimeoutError as exc:
-        status_note('! error: mongodb timeout error: ' + str(exc))
+        status_note(['! error: mongodb timeout error: ', str(exc)])
         sys.exit(1)
     except Exception as exc:
-        status_note('! error: mongodb connection error: ' + str(exc))
+        status_note(['! error: mongodb connection error: ', str(exc)])
         print(traceback.format_exc())
         sys.exit(1)
     # start service
     try:
-        status_note(''.join(('starting bottle at ', env_bottle_host, ':', str(env_bottle_port), '...')))
+        status_note(['starting bottle at ', env_bottle_host, ':', str(env_bottle_port), '...'])
         status_note(base64.b64decode('bGF1bmNoaW5nDQouLS0tLS0tLS0tLS0tLS0uDQp8ICAgICBfLl8gIF8gICAgYC4sX19fX19fDQp8ICAgIChvMnIoKF8oICAgICAgX19fKF8oKQ0KfCAgXCctLTotLS06LS4gICAsJw0KJy0tLS0tLS0tLS0tLS0tJ8#K0DQo=').decode('utf-8'))
         time.sleep(0.1)
         app = WSGILogger(app, [logging.StreamHandler(sys.stdout)], ApacheFormatter())
         run(app=app, host=env_bottle_host, port=env_bottle_port, debug=True)
     except Exception as exc:
-        status_note('! error: bottle server could not be started: ' + traceback.format_exc())
+        status_note(['! error: bottle server could not be started: ', traceback.format_exc()])
         sys.exit(1)
