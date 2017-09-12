@@ -2,7 +2,7 @@ import requests
 
 
 def test_post(my_shipment_id, my_compendium_id, my_recipient, my_cookie):
-    new_data = {'_id': my_shipment_id, 'compendium_id': str(my_compendium_id), 'recipient': str(my_recipient), 'cookie': str(my_cookie)}
+    new_data = {'_id': my_shipment_id, 'compendium_id': str(my_compendium_id), 'recipient': str(my_recipient), 'update_packaging': True, 'cookie': str(my_cookie)}
     r = requests.post(''.join((host, 'shipment')), data=new_data)
     print(r.status_code)
     print(r.text)
