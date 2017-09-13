@@ -13,7 +13,6 @@
 # limitations under the License.
 #
 FROM python:3.6-alpine
-MAINTAINER <https://github.com/o2r-project>
 
 RUN apk add --no-cache wget git \
     && git clone --depth 1 -b master https://github.com/o2r-project/o2r-shipper /shipper \
@@ -30,14 +29,15 @@ ARG VCS_REF
 ARG BUILD_DATE
 
 # Metadata http://label-schema.org/rc1/
-LABEL org.label-schema.vendor="o2r project" \
-      org.label-schema.url="http://o2r.info" \
-      org.label-schema.name="o2r shipper" \
-      org.label-schema.description="ERC shipping to repositories" \    
-      org.label-schema.vcs-url=$VCS_URL \
-      org.label-schema.vcs-ref=$VCS_REF \
-      org.label-schema.build-date=$BUILD_DATE \
-      org.label-schema.docker.schema-version="rc1"
+LABEL maintainer="o2r project <https://github.com/o2r-project>" \
+    org.label-schema.vendor="o2r project" \
+    org.label-schema.url="http://o2r.info" \
+    org.label-schema.name="o2r shipper" \
+    org.label-schema.description="ERC shipping to repositories" \    
+    org.label-schema.vcs-url=$VCS_URL \
+    org.label-schema.vcs-ref=$VCS_REF \
+    org.label-schema.build-date=$BUILD_DATE \
+    org.label-schema.docker.schema-version="rc1"
 
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD ["python", "shipper.py"]
