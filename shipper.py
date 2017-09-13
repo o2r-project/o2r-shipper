@@ -716,13 +716,20 @@ def status_note(msgtxt):
         msgtxt = ''.join(msgtxt)
     print(''.join(('[shipper] ', msgtxt)))
 
+
 # Helpers
 def xstr(s):
     return '' if s is None else str(s)
 
+
 def strtobool(s):
-    if s.lower() in ['true', 't', 'yes', 'y', '1']:
-         return True
+    if s is None:
+        return False
+    if type(s) is str:
+        if s.lower() in ['true', 't', 'yes', 'y', '1', 'on']:
+            return True
+        else:
+            return False
     else:
         return False
 
