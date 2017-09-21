@@ -361,7 +361,7 @@ def recipient_get_repo_list():
         global REPO_LIST
         response.status = 200
         response.content_type = 'application/json'
-        output = {'recipient': []}
+        output = {'recipients': []}
         for repo in REPO_LIST:
             try:
                 output['recipients'].append({'id': xstr(repo.get_id()), 'label': repo.get_label()})
