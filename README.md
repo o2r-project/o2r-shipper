@@ -8,7 +8,7 @@ For its role within o2r, please see [o2r-architecture](https://github.com/o2r-pr
 
 ## License
 
-o2r-shipper is licensed under Apache License, Version 2.0, see file LICENSE. Copyright (C) 2016 - o2r project.
+o2r-shipper is licensed under Apache License, Version 2.0, see file LICENSE. Copyright (C) 2016, 2017 - o2r project.
 
 ## Installation
 
@@ -26,17 +26,18 @@ Required packages: ```requests```, ```bottle```, ```pymongo```, ```wsgi-request-
 
 Usage:
 
-    python shipper.py -t ACCESS_TOKEN
+    python shipper.py -t {ACCESS_TOKENS}
 
-+ optionally use ```-t``` to specify API access_token (Zenodo API). This will be prefered if there is a token available through configuration (s. below).
-+ ~~optionally use ```-x``` to enable test mode, where the newly created or specified depot will be deleted after upload.~~ _currently unavailable_
++ optionally use ```-t``` to specify API access_tokens (e.g. Zenodo API key).
+The received argument must be a valid JSON, e.g. `{\"my_repo\": \"my_key\"}`.
+This argument will be preferred, even if there is are tokens available through configuration (s. below).
 
 + use ```docker build``` command with this repository as the context to build the Docker image.
 
 Example:
 
     docker build -t o2r-shipper
-    docker run --rm -v $(pwd)/o2r-shipper -t ACCESS_TOKEN
+    docker run --rm -v $(pwd)/o2r-shipper -t {ACCESS_TOKENS}
 
 ## 2. Endpoint at o2r web API:
 
@@ -56,10 +57,7 @@ Configuration is based on environment variables as shown in the table below. The
 `SHIPPER_MONGO_NAME` | `mongodb_db` | name of the MongoDB
 `SHIPPER_BOTTLE_HOST` | `bottle_host` | host for bottle, the WSGI micro web-framework used with shipper; default is `localhost`, to allows access from other local services running in containers, set this to `0.0.0.0`
 `SHIPPER_BOTTLE_PORT` | `bottle_port` | port for bottle
-`SHIPPER_REPO_EUDAT_HOST` | `repository_eudat_host` | host of Eudat b2share's API, defaults to _b2share Sandbox_
-`SHIPPER_REPO_EUDAT_TOKEN` | `repository_eudat_token` | API token for zenodo
-`SHIPPER_REPO_ZENODO_HOST` | `repository_zenodo_host` | host of Zenodo's API, defaults to _Zenodo Sandbox_
-`SHIPPER_REPO_ZENODO_TOKEN` | `repository_zenodo_token` | API token for Eudat b2share
+`SHIPPER_REPO_TOKENS` | `repository_tokens` | IDs and API tokens for the repos
 `SHIPPER_BASE_PATH` | `base_path` | base path of target compendium
 `SHIPPER_MAX_DIR_SIZE` | `max_size_mb` | dir size limit for transmission
 `SHIPPER_SECRET` | `session_secret` | session secret for the o2r platform
@@ -67,7 +65,9 @@ Configuration is based on environment variables as shown in the table below. The
 
 ---
 
-## Shipment recipients
+## Shipment recipients ("Repos")
+
+New repositories that serve as shipping destinations can be added to the `/repo` folder of the shipper. They  wrap the API of the target repository. Their filename must start with `repo` and their classname must start with `RepoClass` in order to be recognized. Moreover each repo provides an ID, a LABEL and a HOST in its configuration as well as functions to return these values. The repo classes currently avaiable in that directory can serve as extensive examples.
 
 ### Eudat b2share repository
 
