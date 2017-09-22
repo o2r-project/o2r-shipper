@@ -134,6 +134,26 @@ def shipment_get_file_id(shipmentid):
         raise
 
 
+@app.route('/api/v1/shipment/<shipmentid>/dl', method='GET')
+def shipment_get_dl_file(shipmentid):
+    try:
+        global REPO_TARGET
+        global REPO_LIST
+        # Take first repo with streaming enabled:
+        # todo: Negotiate resource provider, e.g. 3rd party repo dl url
+        for repo in REPO_LIST:
+            if hasattr(repo, 'get_stream'):
+                REPO_TARGET = repo
+        if REPO_TARGET is None:
+            status_note('! no repo with download feature configured')
+            return None
+        else:
+            response.set_header('Content-type', 'application/zip')
+            p = db_find_dl_filepath_from_shipment(shipmentid)
+            return REPO_TARGET.get_stream(p)
+    except:
+        raise
+
 @app.route('/api/v1/shipment/<shipmentid>/publishment', method='PUT')
 def shipment_put_publishment(shipmentid):
     try:
@@ -304,27 +324,19 @@ def shipment_post_new():
                     global REPO_TOKEN
                     db_find_recipient_from_shipment(str(new_id))
                     data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
-                    ###data['deposition_url'] = ''.join((env_repository_zenodo_host.replace('api', 'deposit/'), data['deposition_id']))
                     # zip all files in dir and submit as zip:
                     file_name = '.'.join((str(data['compendium_id']), 'zip'))
                     REPO_TARGET.add_zip_to_depot(data['deposition_id'], file_name, compendium_files, REPO_TOKEN, env_max_dir_size_mb)
+                    # fetch DL link if available
+                    if hasattr(REPO_TARGET, 'get_dl'):
+                        data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
+                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
                     # Add metadata that are in compendium in db:
-                    if 'metadata' in current_compendium:
-                         REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
-                    ###
-                    #elif data['recipient'] == 'eudat':
-                    #    data['deposition_id'] = eudat_create_depot(env_repository_eudat_host, env_repository_eudat_token)
-                    #    data['deposition_url'] = ''.join((env_repository_eudat_host.replace('api', 'records/'), data['deposition_id']))
-                    #    eudat_add_zip_to_depot(env_repository_eudat_host, data['deposition_id'], file_name, compendium_files, env_repository_eudat_token)
-                    #    # Add metadata that are in compendium in db:
-                    #    if 'metadata' in current_compendium:
-                    #        if 'eudat' in current_compendium['metadata']:
-                    #            md = current_compendium['metadata']['eudat']
-                    #            eudat_update_md(env_repository_eudat_host, data['deposition_id'], md, env_repository_eudat_token)
-
+                    if 'metadata' in current_compendium and 'deposition_id' in data:
+                        REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
             # update shipment data in database
             db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-            status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)])
+            #status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)])
             # build and send response
             response.status = status
             response.content_type = 'application/json'
@@ -455,6 +467,15 @@ def db_find_depotid_from_shipment(shipmentid):
     if data is not None:
         if 'deposition_id' in data:
             return str(data['deposition_id'])
+    else:
+        return None
+
+
+def db_find_dl_filepath_from_shipment(shipmentid):
+    data = db['shipments'].find_one({'id': shipmentid})
+    if data is not None:
+        if 'dl_filepath' in data:
+            return str(data['dl_filepath'])
     else:
         return None
 

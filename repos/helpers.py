@@ -56,7 +56,6 @@ def files_dir_size(my_path):
     return sum(f for f in files_recursive_gen(my_path, False))
 
 
-# Self
 def status_note(msgtxt):
     if type(msgtxt) not in [list, str, dict]:
         msgtxt = str(msgtxt)
@@ -65,7 +64,6 @@ def status_note(msgtxt):
     print(''.join(('[shipper] ', msgtxt)))
 
 
-# Helpers
 def xstr(s):
     return '' if s is None else str(s)
 
