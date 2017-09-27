@@ -14,15 +14,13 @@ o2r-shipper is licensed under Apache License, Version 2.0, see file LICENSE. Cop
 
     pip install -r requirements.txt
 
-or use the Dockerfile.
+_or use the Dockerfile_.
 
 ---
 
 ## 1. Options for the shipper service
 
 shipper.py is using external API calls to manage file depositions to repositories while contributing shipment api routes for the o2r web api.
-
-Required packages: ```requests```, ```bottle```, ```pymongo```, ```wsgi-request-logger```
 
 Usage:
 
@@ -65,16 +63,26 @@ Configuration is based on environment variables as shown in the table below. The
 
 ---
 
+
+## Bagit Validity
+
+At shipping, the shipper attempts to validate the target files as valid bagit bags, using the LoC bagit.py module. If no bagit bag is found, it is created.
+An invalid or bag will be updated. The shipper is designed to transport only valid bags to its recipients.
+
+
 ## Shipment recipients ("Repos")
 
-New repositories that serve as shipping destinations can be added to the `/repo` folder of the shipper. They  wrap the API of the target repository. Their filename must start with `repo` and their classname must start with `RepoClass` in order to be recognized. Moreover each repo provides an ID, a LABEL and a HOST in its configuration as well as functions to return these values. The repo classes currently avaiable in that directory can serve as extensive examples.
+New repositories that serve as shipping destinations can be added to the `/repo` folder of the shipper. They wrap the API of the target repository. Their filename must start with `repo` and their classname must start with `RepoClass` in order to be recognized. Moreover each repo provides an ID, a LABEL and a HOST in its configuration as well as functions to return these values. They inherit necessary imports from the master `repoclass` module found in the same folder. 
+The repo classes currently available in that directory can serve as extensive examples.
 
-### Eudat b2share repository
+## Supported 3rd party repositories
+
+### Eudat b2share (sandbox) repository
 
 To ship ERC to [Eudat b2share](https://b2share.eudat.eu/) (or the [Eudat b2share Sandbox](https://trng-b2share.eudat.eu/)), you must create an account and log in.
 Then go to your account and get the personal access token.
 
-### Zenodo repository
+### Zenodo (sandbox) repository
 
 To ship ERC to [Zenodo](https://zenodo.org) (or the [Zenodo Sandbox](https://sandbox.zenodo.org)), you must create an account and log in.
 Then go to your account _Settings_, open the _Applications_ settings and add a new _Personal access token_ including the scopes `deposit:write` and `deposit:actions`.

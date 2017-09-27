@@ -1,5 +1,6 @@
 bagit
 bottle
-requests
+gevent
 pymongo
+requests
 zipstream
