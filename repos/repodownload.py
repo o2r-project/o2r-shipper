@@ -8,6 +8,9 @@ LABEL = "Download"
 
 
 class RepoClassDownload(Repo):
+    def get_host(self):
+        return str(HOST)
+
     def get_label(self):
         return str(LABEL)
 
@@ -23,24 +26,20 @@ class RepoClassDownload(Repo):
     def get_dl(self, zip_name, target_path):
         return xstr(target_path)
 
-    def get_stream(self, target_path):
-        # create a filelike object in memory
-        filelike = BytesIO()
-        # fill memory object into zip constructor
-        zipf = zipfile.ZipFile(filelike, 'w', zipfile.ZIP_DEFLATED)
-        # walk target dir recursively
-        for root, dirs, files in os.walk(target_path):
-            for file in files:
-                zipf.write(os.path.join(root, file),
-                           arcname=os.path.relpath(os.path.join(root, file), target_path))
-        zipf.close()
-        filelike.seek(0)
-        return filelike.read()
+    def generate_stream(self, path):
+        z = zipstream.ZipFile(mode='w', allowZip64=True, compression=zipstream.ZIP_DEFLATED)
+        for root, dirs, files in os.walk(path):
+            for filename in files:
+                file_path = os.path.join(root, filename)
+                arcpath = os.path.join(path, os.path.relpath(file_path, path))
+                z.write(file_path, arcpath)
+        for chunk in z:
+            yield chunk
 
     def create_depot(self, token):
         # no token needed, since repos is surrogate
         # function is required to mimic the other repos
-        return
+        return None
         pass
 
     def add_zip_to_depot(self, deposition_id, zip_name, target_path, token, max_dir_size_mb):

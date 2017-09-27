@@ -2,4 +2,4 @@ bagit
 bottle
 requests
 pymongo
-wsgi-request-logger
+zipstream

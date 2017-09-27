@@ -1,13 +1,16 @@
 from .repoclass import *
 from .helpers import *
 
-# Repository Eudat b2share
+# Repository Eudat b2share Sandbox
 HOST = "https://trng-b2share.eudat.eu/api"  # api base url
 ID = "b2share_sandbox"
-LABEL = "Eudat b2share Sandbox"
+LABEL = "b2share Sandbox"
 
 
 class RepoClassEudat(Repo):
+    def get_host(self):
+        return str(HOST)
+
     def get_label(self):
         return str(LABEL)
 
@@ -19,8 +22,7 @@ class RepoClassEudat(Repo):
             global HOST
             global ID
             # get file id from bucket url:
-            ##headers = {"Content-Type": "application/json"}
-            r = requests.get(''.join((HOST, '/records', '?access_token=', token)), params={'access_token': token}, verify=True)
+            r = requests.get(''.join((HOST, '/records', '?access_token=', token)), params={'access_token': token}, verify=True, timeout=3)
             status_note(['<', ID, '> token verification: ', xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
                 return True
@@ -29,10 +31,11 @@ class RepoClassEudat(Repo):
         except:
             raise
 
-    def eudat_create_depot(base, access_token):
+    def create_depot(self, access_token):
+        global HOST
         try:
             headers = {"Content-Type": "application/json"}
-            base_url = ''.join((base, "/records/?access_token=", access_token))
+            base_url = ''.join((HOST, "/records/?access_token=", access_token))
             # test md
             d = {"titles": [{"title": "TestRest"}], "community": "e9b9792e-79fb-4b07-b6b4-b9c2bd06d095",
                  "open_access": True, "community_specific": {}}
@@ -44,13 +47,14 @@ class RepoClassEudat(Repo):
         except:
             raise
 
-    def eudat_add_zip_to_depot(self, base, deposition_id, zip_name, target_path, token):
+    def add_zip_to_depot(self, deposition_id, zip_name, target_path, token):
+        global HOST
         try:
             fsum = files_dir_size(target_path)
             if fsum <= env_max_dir_size_mb:
                 # get bucket url:
                 headers = {"Content-Type": "application/json"}
-                r = requests.get(''.join((base, '/records/', deposition_id, '/draft?access_token=', token)),
+                r = requests.get(''.join((HOST, '/records/', deposition_id, '/draft?access_token=', token)),
                                  headers=headers)
                 status_note([xstr(r.status_code), ' ', xstr(r.reason)])
                 bucket_url = ''
@@ -88,9 +92,10 @@ class RepoClassEudat(Repo):
             # raise
             status_note(['! error: ', xstr(exc.args[0])])
 
-    def eudat_update_md(self, base, record_id, my_md, access_token):
+    def update_md(self, record_id, my_md, access_token):
+        global HOST
         try:
-            base_url = ''.join((base, "/api/records/", record_id, "/draft?access_token=", access_token))
+            base_url = ''.join((HOST, "/api/records/", record_id, "/draft?access_token=", access_token))
             # test:
             # test_md = [{"op": "add", "path": "/keywords", "value": ["keyword1", "keyword2"]}]
             headers = {"Content-Type": "application/json-patch+json"}

@@ -1,13 +1,16 @@
 from .repoclass import *
 from .helpers import *
 
-# Repository Zenodo.org
+# Repository Zenodo.org Sandbox
 HOST = "https://sandbox.zenodo.org/api"  # api base url
 ID = 'zenodo_sandbox'
-LABEL = "Zenodo"  # Zenodo Sandbox
+LABEL = "Zenodo Sandbox"
 
 
 class RepoClassZenodo(Repo):
+    def get_host(self):
+        return str(HOST)
+
     def get_label(self):
         return str(LABEL)
 
@@ -20,7 +23,7 @@ class RepoClassZenodo(Repo):
             global ID
             # get file id from bucket url:
             headers = {"Content-Type": "application/json"}
-            r = requests.get(''.join((HOST, '/deposit/depositions/', '?access_token=', token)), headers=headers)
+            r = requests.get(''.join((HOST, '/deposit/depositions/', '?access_token=', token)), headers=headers, verify=True, timeout=3)
             status_note(['<', ID, '> token verification: ', xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
                 return True
@@ -49,6 +52,7 @@ class RepoClassZenodo(Repo):
             status_note(['! error: ', xstr(exc.args[0])])
 
     def add_zip_to_depot(self, deposition_id, zip_name, target_path, token, max_dir_size_mb):
+        #todo: try out zipstream here, too
         try:
             global HOST
             fsum = files_dir_size(target_path)

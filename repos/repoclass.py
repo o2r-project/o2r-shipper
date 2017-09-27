@@ -14,6 +14,7 @@ from io import BytesIO
 
 import bagit
 import requests
+import zipstream
 
 
 # shipper's generic parent class for repository api wrappers

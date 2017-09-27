@@ -15,35 +15,24 @@
     limitations under the License.
 
 """
-
+from gevent import monkey
+monkey.patch_all()
 import argparse
 import ast
-# import base64
 import hashlib
-# import hmac
 import json
 import logging
-# import os
-# import re
-# import time
 import traceback
 import urllib.parse
 import uuid
-
 import bagit
 import requests
+
 from bottle import *
 from pymongo import MongoClient, errors
-from requestlogger import WSGILogger, ApacheFormatter
 import inspect
-
 from repos import *
 from repos.helpers import *
-
-
-# import zipfile
-# from datetime import datetime
-# from io import BytesIO
 
 # Bottle
 app = Bottle()
@@ -116,12 +105,11 @@ def shipment_get_status(shipmentid):
 def shipment_get_file_id(shipmentid):
     try:
         global REPO_TARGET
-        global REPO_HOST
         global REPO_TOKEN
         current_depot = db_find_depotid_from_shipment(shipmentid)
         db_find_recipient_from_shipment(shipmentid)
         headers = {"Content-Type": "application/json"}
-        r = requests.get(''.join((REPO_HOST, '/deposit/depositions/', current_depot, '?access_token=', REPO_TOKEN)), headers=headers)
+        r = requests.get(''.join((REPO_TARGET.get_host(), '/deposit/depositions/', current_depot, '?access_token=', REPO_TOKEN)), headers=headers)
         if 'files' in r.json():
             response.status = 200
             response.content_type = 'application/json'
@@ -133,38 +121,47 @@ def shipment_get_file_id(shipmentid):
     except:
         raise
 
-
 @app.route('/api/v1/shipment/<shipmentid>/dl', method='GET')
 def shipment_get_dl_file(shipmentid):
     try:
         global REPO_TARGET
         global REPO_LIST
-        # Take first repo with streaming enabled:
-        # todo: Negotiate resource provider, e.g. 3rd party repo dl url
-        for repo in REPO_LIST:
-            if hasattr(repo, 'get_stream'):
+        if REPO_LIST is not None:
+            # allows for multiple DL sources:
+            for repo in REPO_LIST:
                 REPO_TARGET = repo
+                if hasattr(REPO_TARGET, 'get_id'):
+                    # default for now:
+                    if REPO_TARGET.get_id() == 'download':
+                        break
+                    else:
+                        REPO_TARGET = None
         if REPO_TARGET is None:
-            status_note('! no repo with download feature configured')
-            return None
+            status_note('! no repository with download feature configured')
+            response.status = 501
+            response.content_type = 'application/json'
+            return json.dumps({'error': 'no repository with download feature configured'})
         else:
-            response.set_header('Content-type', 'application/zip')
-            p = db_find_dl_filepath_from_shipment(shipmentid)
-            return REPO_TARGET.get_stream(p)
-    except:
-        raise
+            response.status = 202
+            response.headers['Content-Type'] = 'application/zip'
+            response.headers['Content-Disposition'] = ''.join(('attachment; filename=', shipmentid, '.zip'))
+            p = os.path.normpath(db_find_dl_filepath_from_shipment(shipmentid))
+            return REPO_TARGET.generate_stream(p)
+    except Exception as exc:
+        status_note(['! error: ', exc.args[0], '\n', traceback.format_exc()])
+        response.status = 400
+        response.content_type = 'application/json'
+        return json.dumps({'error': 'bad request'})
+
 
 @app.route('/api/v1/shipment/<shipmentid>/publishment', method='PUT')
 def shipment_put_publishment(shipmentid):
     try:
         global REPO_TARGET
-        #global REPO_HOST
         global REPO_TOKEN
         #! once published, cant delete
-
-        #todo make this function in repozenodo and call here
+        #todo make this function in repo and call here
         REPO_TARGET.publish(REPO_TOKEN)
-
     except:
         raise
 
@@ -173,7 +170,6 @@ def shipment_put_publishment(shipmentid):
 def shipment_get_publishment(shipmentid):
     try:
         global REPO_TARGET
-        global REPO_HOST
         global REPO_TOKEN
         db_find_recipient_from_shipment(shipmentid)
         current_depot = db_find_depotid_from_shipment(shipmentid)
@@ -189,11 +185,10 @@ def shipment_del_file_id(shipmentid, fileid):
     # delete specific file in a depot of a shipment
     try:
         global REPO_TARGET
-        global REPO_HOST
         global REPO_TOKEN
         current_depot = db_find_depotid_from_shipment(shipmentid)
         db_find_recipient_from_shipment(shipmentid)
-        REPO_TARGET.del_from_depot(REPO_HOST, current_depot, fileid, REPO_TOKEN)
+        REPO_TARGET.del_from_depot(current_depot, fileid, REPO_TOKEN)
     except:
         raise
 
@@ -320,7 +315,6 @@ def shipment_post_new():
                     status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)])
                     # Ship to the selected repository
                     global REPO_TARGET
-                    global REPO_HOST
                     global REPO_TOKEN
                     db_find_recipient_from_shipment(str(new_id))
                     data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
@@ -450,7 +444,6 @@ def db_find_recipient_from_shipment(shipmentid):
                 for repo in REPO_LIST:
                     #print(repo.__class__.__name__)
                     if data['recipient'].lower() == repo.get_id():
-                        #print("#####" + repo.get_id())
                         REPO_TARGET = repo
                         try:
                             REPO_TOKEN = TOKEN_LIST[repo.get_id()]
@@ -526,18 +519,13 @@ if __name__ == "__main__":
         env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', config['mongodb_db'])
         env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
         env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
-        #env_repository_zenodo_host = os.environ.get('SHIPPER_REPO_ZENODO_HOST', config['repository_zenodo_host'])
-        #env_repository_eudat_host = os.environ.get('SHIPPER_REPO_EUDAT_HOST', config['repository_eudat_host'])
         TOKEN_LIST = []
         if args is not None:
             if 'token' in args:
                 TOKEN_LIST = args['token']
-                # env_repository_zenodo_token = args['token']
-                # env_repository_eudat_token = args['token']
         else:
             TOKEN_LIST = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
-            #env_repository_zenodo_token = os.environ.get('SHIPPER_REPO_ZENODO_TOKEN', config['repository_zenodo_token'])
-            #env_repository_eudat_token = os.environ.get('SHIPPER_REPO_EUDAT_TOKEN', config['repository_eudat_token'])
+        # Get environment variables
         env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
         env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
         env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
@@ -569,11 +557,10 @@ if __name__ == "__main__":
         sys.exit(1)
     # start service
     try:
-        #status_note(['starting bottle at ', env_bottle_host, ':', str(env_bottle_port), '...'])
         status_note(base64.b64decode('IA0KLi0tLS0tLS0tLS0tLS0tLg0KfCAgICAgXy5fICBfICAgIGAuLF9fX19fXw0KfCAgICAobzJyKChfKCAgICAgIF9fXyhfKCkNCnwgIFwnLS06LS0tOi0uICAgLCcNCictLS0tLS0tLS0tLS0tLSc=').decode('utf-8'))
         time.sleep(0.1)
-        app = WSGILogger(app, [logging.StreamHandler(sys.stdout)], ApacheFormatter())
-        run(app=app, host=env_bottle_host, port=env_bottle_port, debug=True)
+        #app = WSGILogger(app, [logging.StreamHandler(sys.stdout)], ApacheFormatter())  # incompatiple with gevent server
+        run(app=app, host=env_bottle_host, port=env_bottle_port, server='gevent', debug=True)
     except Exception as exc:
         status_note(['! error: bottle server could not be started: ', traceback.format_exc()])
         sys.exit(1)
