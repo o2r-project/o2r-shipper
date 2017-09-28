@@ -522,9 +522,10 @@ if __name__ == "__main__":
         TOKEN_LIST = []
         if args is not None:
             if 'token' in args:
-                TOKEN_LIST = args['token']
-        else:
-            TOKEN_LIST = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
+                if args['token'] is not None:
+                    TOKEN_LIST = args['token']
+                else:
+                    TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens']))
         # Get environment variables
         env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
         env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
@@ -533,8 +534,10 @@ if __name__ == "__main__":
         env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
         env_compendium_files = os.path.join(env_file_base_path, 'compendium')
         env_user_id = None
-        status_note(['loaded environment vars and db config:', '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name,
-                     '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port)])
+        status_note(['loaded environment vars and db config:',
+            '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name,
+            '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port),
+            '\n\ttokens: ', str(TOKEN_LIST)])
         REPO_TARGET = None  # generic repository object
         REPO_LIST = []
         # load repo classes from /repo and register
@@ -559,7 +562,6 @@ if __name__ == "__main__":
     try:
         status_note(base64.b64decode('IA0KLi0tLS0tLS0tLS0tLS0tLg0KfCAgICAgXy5fICBfICAgIGAuLF9fX19fXw0KfCAgICAobzJyKChfKCAgICAgIF9fXyhfKCkNCnwgIFwnLS06LS0tOi0uICAgLCcNCictLS0tLS0tLS0tLS0tLSc=').decode('utf-8'))
         time.sleep(0.1)
-        #app = WSGILogger(app, [logging.StreamHandler(sys.stdout)], ApacheFormatter())  # incompatiple with gevent server
         run(app=app, host=env_bottle_host, port=env_bottle_port, server='gevent', debug=True)
     except Exception as exc:
         status_note(['! error: bottle server could not be started: ', traceback.format_exc()])
