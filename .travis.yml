@@ -16,7 +16,7 @@ before_script:
   - docker run --name testloader -d -p 8088:8088 --link mongodb:mongodb -v $HOME:/tmp/o2r -e LOADER_MONGODB=mongodb://mongodb:27017 -e DEBUG=* o2rproject/o2r-loader:latest
   - docker run --name testmuncher -d -p 8080:8080 --link mongodb:mongodb -v $HOME:/tmp/o2r -v /var/run/docker.sock:/var/run/docker.sock -e MUNCHER_MONGODB=mongodb://mongodb:27017 -e DEBUG=muncher,muncher:* o2rproject/o2r-muncher:latest
   - docker build --tag shipper .
-  - "docker run --name testshipper -t -d -p 8087:8087 --link mongodb:mongodb -v $HOME:/tmp/o2r -e SHIPPER_REPO_TOKENS='{\"Download\": \"\"}' -e SHIPPER_BOTTLE_HOST=0.0.0.0 -e SHIPPER_MONGODB=mongodb://mongodb:27017/ shipper"
+  - "docker run --name testshipper -t -d -p 8087:8087 --link mongodb:mongodb -v $HOME:/tmp/o2r -e SHIPPER_REPO_TOKENS='{\\\"Download\\\": \\\"\\\"}' -e SHIPPER_BOTTLE_HOST=0.0.0.0 -e SHIPPER_MONGODB=mongodb://mongodb:27017/ shipper"
   - sleep 10
 script:
   - pytest
