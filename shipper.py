@@ -520,11 +520,12 @@ if __name__ == "__main__":
         env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
         env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
         TOKEN_LIST = []
-        if args is not None:
-            if 'token' in args:
-                TOKEN_LIST = args['token']
-        else:
-            TOKEN_LIST = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
+        if 'token' in args:
+            if args['token'] is not None:
+                if 'token' in args:
+                    TOKEN_LIST = args['token']
+            else:
+                TOKEN_LIST = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
         # Get environment variables
         env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
         env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
