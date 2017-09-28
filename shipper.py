@@ -480,7 +480,8 @@ def register_repos():
     global TOKEN_LIST
     if TOKEN_LIST is None:
         status_note('! no repository tokens available, unable to proceed')
-        return None
+        sys.exit(1)
+        #return None
     try:
         for name, obj in inspect.getmembers(sys.modules[__name__]):
             if name.startswith('repo'):
@@ -525,7 +526,15 @@ if __name__ == "__main__":
                 if args['token'] is not None:
                     TOKEN_LIST = args['token']
                 else:
-                    TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens']))
+                    rt = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
+                    if type(rt) is str:
+                        try:
+                            TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens']))
+                        except:
+                            TOKEN_LIST = None
+                            pass
+                    elif type(rt) is dict:
+                        TOKEN_LIST = rt
         # Get environment variables
         env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
         env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
