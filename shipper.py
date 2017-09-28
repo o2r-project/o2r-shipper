@@ -520,12 +520,12 @@ if __name__ == "__main__":
         env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
         env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
         TOKEN_LIST = []
-        if 'token' in args:
-            if args['token'] is not None:
-                if 'token' in args:
+        if args is not None:
+            if 'token' in args:
+                if args['token'] is not None:
                     TOKEN_LIST = args['token']
-            else:
-                TOKEN_LIST = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
+                else:
+                    TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens']))
         # Get environment variables
         env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
         env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
@@ -534,8 +534,10 @@ if __name__ == "__main__":
         env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
         env_compendium_files = os.path.join(env_file_base_path, 'compendium')
         env_user_id = None
-        status_note(['loaded environment vars and db config:', '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name,
-                     '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port)])
+        status_note(['loaded environment vars and db config:',
+            '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name,
+            '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port),
+            '\n\ttokens: ', str(TOKEN_LIST)])
         REPO_TARGET = None  # generic repository object
         REPO_LIST = []
         # load repo classes from /repo and register
