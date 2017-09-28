@@ -105,7 +105,7 @@ pip install -U pytest requests json
 # start shipper in container and database:
 docker build -t shipper .
 docker run --name testdb -d -p 27017:27017 mongo:3.4
-docker run --name testshipper -d -p 8087:8087 --link testdb:testdb -e SHIPPER_MONGODB=mongodb://testdb:27017 -e SHIPPER_BOTTLE_HOST=0.0.0.0 -e SHIPPER_REPO_TOKENS='{"download": ""}' shipper
+docker run --name testshipper -t -d -p 8087:8087 --link testdb:testdb -e SHIPPER_MONGODB=mongodb://testdb:27017 -e SHIPPER_BOTTLE_HOST=0.0.0.0 -e SHIPPER_REPO_TOKENS='{"download": ""}' shipper
 sleep 5
 
 # run the tests:
