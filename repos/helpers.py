@@ -17,7 +17,6 @@ import bagit
 import requests
 from bottle import *
 from pymongo import MongoClient, errors
-from requestlogger import WSGILogger, ApacheFormatter
 
 
 # File interaction

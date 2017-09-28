@@ -559,7 +559,6 @@ if __name__ == "__main__":
     try:
         status_note(base64.b64decode('IA0KLi0tLS0tLS0tLS0tLS0tLg0KfCAgICAgXy5fICBfICAgIGAuLF9fX19fXw0KfCAgICAobzJyKChfKCAgICAgIF9fXyhfKCkNCnwgIFwnLS06LS0tOi0uICAgLCcNCictLS0tLS0tLS0tLS0tLSc=').decode('utf-8'))
         time.sleep(0.1)
-        #app = WSGILogger(app, [logging.StreamHandler(sys.stdout)], ApacheFormatter())  # incompatiple with gevent server
         run(app=app, host=env_bottle_host, port=env_bottle_port, server='gevent', debug=True)
     except Exception as exc:
         status_note(['! error: bottle server could not be started: ', traceback.format_exc()])
