@@ -1,23 +1,21 @@
 
 import argparse
 import ast
-# import base64
 import hashlib
-# import hmac
 import json
 import logging
-# import os
-# import re
-# import time
-import traceback
+#import traceback
 import urllib.parse
 import uuid
+import zipstream
 
 import bagit
 import requests
 from bottle import *
 from pymongo import MongoClient, errors
 
+
+__all__ = ['status_note', 'generate_zipstream', 'xstr', 'files_scan_path', 'files_dir_size']
 
 # File interaction
 def files_scan_path(filepath):
@@ -53,6 +51,17 @@ def files_recursive_gen(start_path, gen_paths):
 
 def files_dir_size(my_path):
     return sum(f for f in files_recursive_gen(my_path, False))
+
+
+def generate_zipstream(path):
+    z = zipstream.ZipFile(mode='w', allowZip64=True, compression=zipstream.ZIP_DEFLATED)
+    for root, dirs, files in os.walk(path):
+        for filename in files:
+            file_path = os.path.join(root, filename)
+            arcpath = os.path.join(path, os.path.relpath(file_path, path))
+            z.write(file_path, arcpath)
+    for chunk in z:
+        yield chunk
 
 
 def status_note(msgtxt):

@@ -146,7 +146,7 @@ def shipment_get_dl_file(shipmentid):
             response.headers['Content-Type'] = 'application/zip'
             response.headers['Content-Disposition'] = ''.join(('attachment; filename=', shipmentid, '.zip'))
             p = os.path.normpath(db_find_dl_filepath_from_shipment(shipmentid))
-            return REPO_TARGET.generate_stream(p)
+            return generate_zipstream(p)
     except Exception as exc:
         status_note(['! error: ', exc.args[0], '\n', traceback.format_exc()])
         response.status = 400
