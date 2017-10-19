@@ -2,7 +2,7 @@ tmp/o2r
 .vscode
 start_Shipper_with_tokens.cmd
 # Byte-compiled / optimized / DLL files
-__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 
