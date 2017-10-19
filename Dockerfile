@@ -14,14 +14,21 @@
 #
 FROM python:3.6-alpine
 
-RUN apk add --no-cache wget git \
-    && git clone --depth 1 -b master https://github.com/o2r-project/o2r-shipper /shipper \
-    && wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64 \
-    && chmod +x /usr/local/bin/dumb-init \
-    && apk del wget git
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" > /etc/apk/repositories \
+    && echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories \
+    && echo "http://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories
+
+RUN apk add --no-cache gcc musl-dev dumb-init
 
 WORKDIR /shipper
+COPY repos repos
+COPY shipper.py shipper.py
+COPY config.json config.json
+COPY requirements.txt requirements.txt
+
 RUN pip install -r requirements.txt
+
+#RUN apk del gcc musl-dev
 
 # Metadata params provided with docker build command
 ARG VCS_URL
@@ -29,7 +36,7 @@ ARG VCS_REF
 ARG BUILD_DATE
 
 # Metadata http://label-schema.org/rc1/
-LABEL maintainer="o2r project <https://github.com/o2r-project>" \
+LABEL maintainer="o2r-project <https://o2r.info>" \
     org.label-schema.vendor="o2r project" \
     org.label-schema.url="http://o2r.info" \
     org.label-schema.name="o2r shipper" \
@@ -39,7 +46,7 @@ LABEL maintainer="o2r project <https://github.com/o2r-project>" \
     org.label-schema.build-date=$BUILD_DATE \
     org.label-schema.docker.schema-version="rc1"
 
-ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["python", "shipper.py"]
 
 # docker build -t o2r-shipper .

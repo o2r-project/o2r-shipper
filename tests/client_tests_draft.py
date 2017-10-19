@@ -8,6 +8,12 @@ def test_post(my_shipment_id, my_compendium_id, my_recipient, my_cookie):
     print(r.text)
 
 
+def test_repos():
+    r = requests.get(''.join((host, 'recipient')))
+    print(r.status_code)
+    print(r.text)
+
+
 def test_post_update(my_depot, my_compendium_id, my_recipient, my_cookie):
     test_md = {'metadata': {
         "creators": [{
@@ -68,14 +74,15 @@ def test_get(my_id):
 
 if __name__ == "__main__":
     print('client test for o2r shipper service')
-
     host = 'http://localhost:8087/api/v1/'
-    zenodo_host = 'https://sandbox.zenodo.org/api'
     userlevel = 200  # enter user level
     the_cookie = ''  # enter cookie string
     try:
+        # List of Repos
+        test_repos()
+
         # Shipment create new
-        test_post(None, '4XgD9', 'zenodo', the_cookie)
+        test_post(None, '4XgD9', 'zenodo_sandbox', the_cookie)
 
         # Shipment update metadata only
         #test_post_update('69159', '4XgD9', 'zenodo', the_cookie)
