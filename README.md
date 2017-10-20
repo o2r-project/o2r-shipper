@@ -28,7 +28,7 @@ Usage:
 
 + optionally use ```-t``` to specify API access_tokens (e.g. Zenodo API key).
 The received argument must be a valid JSON, e.g. `{\"my_repo\": \"my_key\"}`.
-This argument will be preferred, even if there is are tokens available through configuration (s. below).
+This argument will be preferred, even if there are tokens available through configuration (s. below).
 
 + use ```docker build``` command with this repository as the context to build the Docker image.
 
@@ -77,12 +77,19 @@ The repo classes currently available in that directory can serve as extensive ex
 
 ## Supported 3rd party repositories
 
+### Download as repository surrogate
+_ID_ `download`
+
+In order to "ship to your own storage", there is a download repoclass available, that unlike the remote repositories creates a download link for streaming the targeted compendium.
+
 ### Eudat b2share (sandbox) repository
+_IDs_ `b2share_sandbox`, `b2share`
 
 To ship ERC to [Eudat b2share](https://b2share.eudat.eu/) (or the [Eudat b2share Sandbox](https://trng-b2share.eudat.eu/)), you must create an account and log in.
 Then go to your account and get the personal access token.
 
 ### Zenodo (sandbox) repository
+_IDs_ `zenodo_sandbox`, `zenodo`
 
 To ship ERC to [Zenodo](https://zenodo.org) (or the [Zenodo Sandbox](https://sandbox.zenodo.org)), you must create an account and log in.
 Then go to your account _Settings_, open the _Applications_ settings and add a new _Personal access token_ including the scopes `deposit:write` and `deposit:actions`.
