@@ -45,7 +45,7 @@ def strip_path():
     try:
         request.environ['PATH_INFO'] = request.environ['PATH_INFO'].rstrip('/')
     except Exception as exc:
-        status_note(['! error: ', xstr(exc.args[0])])
+        status_note(['! error: ', xstr(exc.args[0])], d=is_debug)
 
 
 @app.route('/api/v1/shipment/<name>', method='GET')
@@ -58,7 +58,7 @@ def shipment_get_one(name):
             data.pop('_id', None)
         return json.dumps(data)
     else:
-        status_note(['user requested non-existing shipment ', name])
+        status_note(['user requested non-existing shipment ', name], d=is_debug)
         response.status = 404
         response.content_type = 'application/json'
         return json.dumps({'error': 'a compendium with that id does not exist'})
@@ -137,7 +137,7 @@ def shipment_get_dl_file(shipmentid):
                     else:
                         REPO_TARGET = None
         if REPO_TARGET is None:
-            status_note('! no repository with download feature configured')
+            status_note('! no repository with download feature configured', d=is_debug)
             response.status = 501
             response.content_type = 'application/json'
             return json.dumps({'error': 'no repository with download feature configured'})
@@ -148,7 +148,7 @@ def shipment_get_dl_file(shipmentid):
             p = os.path.normpath(db_find_dl_filepath_from_shipment(shipmentid))
             return generate_zipstream(p)
     except Exception as exc:
-        status_note(['! error: ', exc.args[0], '\n', traceback.format_exc()])
+        status_note(['! error: ', xstr(exc.args[0])], d=is_debug)
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
@@ -207,13 +207,13 @@ def shipment_post_new():
         except:
             cookie = request.get_cookie(env_cookie_name)
         if cookie is None:
-            status_note(['cookie <', env_cookie_name, '> cannot be found!'])
+            status_note(['cookie <', env_cookie_name, '> cannot be found!'], d=is_debug)
             response.status = 400
             response.content_type = 'application/json'
             return json.dumps({'error': 'bad request: authentication cookie is missing'})
         cookie = urllib.parse.unquote(cookie)
         user_entitled = session_user_entitled(cookie, env_user_level_min)
-        status_note(['validating session with cookie <', cookie, '> and minimum level ', str(env_user_level_min), '. found user <', str(user_entitled), '>'])
+        status_note(['validating session with cookie <', cookie, '> and minimum level ', str(env_user_level_min), '. found user <', str(user_entitled), '>'], d=is_debug)
         if user_entitled:
             # get shipment id
             new_id = request.forms.get('_id')
@@ -240,13 +240,13 @@ def shipment_post_new():
                     'md': new_md
                     }
             current_mongo_doc = db.shipments.insert_one(data)
-            status_note(['created shipment object ', str(current_mongo_doc.inserted_id)])
+            status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
             status = 200
             if not data['deposition_id']:
                 # no depot yet, go create one
                 current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
                 if not current_compendium:
-                    status_note('! Invalid compendium id')
+                    status_note('! Invalid compendium id', d=is_debug)
                     data['status'] = 'error'
                     status = 400
                 else:
@@ -268,13 +268,13 @@ def shipment_post_new():
                                     try:
                                         bag = bagit.Bag(compendium_files)
                                         bag.validate()
-                                        status_note(['valid bagit bag at <', str(data['compendium_id']), '>'])
+                                        status_note(['valid bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
                                     except bagit.BagValidationError as e:
-                                        status_note(['! invalid bagit bag at <', str(data['compendium_id']), '>'])
+                                        status_note(['! invalid bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
                                         details = []
                                         for d in e.details:
                                             details.append(str(d))
-                                            status_note(str(d))
+                                            status_note(xstr(d))
                                         # Exit point for invalid not to be repaired bags
                                         if not strtobool(data['update_packaging']):
                                             data['status'] = 'error'
@@ -292,7 +292,7 @@ def shipment_post_new():
                                                 # Validate a second time to ensure successful update:
                                                 try:
                                                     bag.validate()
-                                                    status_note(['Valid updated bagit bag at <', str(data['compendium_id']), '>'])
+                                                    status_note(['Valid updated bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
                                                 except bagit.BagValidationError:
                                                     status_note('! error while validating updated bag')
                                                     data['status'] = 'error'
@@ -302,7 +302,7 @@ def shipment_post_new():
                                                     response.content_type = 'application/json'
                                                     return json.dumps({'error': 'unable to validate updated bag'})
                                             except Exception as e:
-                                                status_note(['! error while bagging: ', str(e)])
+                                                status_note(['! error while bagging: ', str(e)], d=is_debug)
                                 elif compendium_state == 2:
                                     # Case: dir is no bagit bag, needs to become a bag first
                                     try:
@@ -310,10 +310,10 @@ def shipment_post_new():
                                         bag.save()
                                         status_note('New bagit bag written')
                                     except Exception as e:
-                                        status_note(['! error while bagging: ', xstr(e)])
+                                        status_note(['! error while bagging: ', xstr(e)], d=is_debug)
                                 #elif compendium_state == 3: # would be dealing with zip files...
                             else:
-                                status_note(['! error, invalid path to compendium: ', compendium_files])
+                                status_note(['! error, invalid path to compendium: ', compendium_files], d=is_debug)
                                 data['status'] = 'error'
                                 # update shipment data in database
                                 db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
@@ -323,7 +323,7 @@ def shipment_post_new():
                             # Continue with zipping and upload
                             # update shipment data in database
                             db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                            status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)])
+                            status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
                             # Ship to the selected repository
                             global REPO_TARGET
                             global REPO_TOKEN
@@ -356,14 +356,14 @@ def shipment_post_new():
             response.content_type = 'application/json'
             return json.dumps({'error': 'insufficient permissions (not logged in?)'})
     except requests.exceptions.RequestException as exc:
-        raise  # debug
-        status_note(['! error: ', exc.args[0], '\n', traceback.format_exc()])
+        raise
+        status_note(['! error: ', xstr(exc.args[0])], d=is_debug)
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
     except Exception as exc:
-        raise  # debug
-        status_note(['! error: ', exc.args[0], '\n', traceback.format_exc()])
+        raise
+        status_note(['! error: ', xstr(exc.args[0])], d=is_debug)
         message = ''.join('bad request:', exc.args[0])
         response.status = 500
         response.content_type = 'application/json'
@@ -381,7 +381,7 @@ def recipient_get_repo_list():
             try:
                 output['recipients'].append({'id': xstr(repo.get_id()), 'label': repo.get_label()})
             except AttributeError:
-                status_note(['! error: repository class ', xstr(repo), ' @ ', xstr(name), ' is unlabled or has no function to return its label.'])
+                status_note(['! error: repository class ', xstr(repo), ' @ ', xstr(name), ' is unlabled or has no function to return its label.'], d=is_debug)
         return json.dumps(output)
     except:
         raise
@@ -516,11 +516,13 @@ def register_repos():
 # Main
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='shipper arguments')
-    # args optional:
-    parser.add_argument('-t', '--token', type=json.loads, help='access tokens', required=False)
+    parser.add_argument('-d', '--debug', help='enable debug mode', required=False, action='store_true', default=False)
+    parser.add_argument('-t', '--token', type=json.loads, help='access tokens', required=True)
     # args parsed:
     args = vars(parser.parse_args())
     status_note(['args: ', xstr(args)])
+    global is_debug
+    is_debug = args['debug']
     try:
         with open('config.json') as data_file:
             config = json.load(data_file)

@@ -26,9 +26,11 @@ Usage:
 
     python shipper.py -t {ACCESS_TOKENS}
 
-+ optionally use ```-t``` to specify API access_tokens (e.g. Zenodo API key).
++ use ```-t``` to specify API access_tokens (e.g. Zenodo API key).
 The received argument must be a valid JSON, e.g. `{\"my_repo\": \"my_key\"}`.
 This argument will be preferred, even if there are tokens available through configuration (s. below).
+
++ optionally use ```-d``` to enable debug mode and increase verbosity upon error.
 
 + use ```docker build``` command with this repository as the context to build the Docker image.
 

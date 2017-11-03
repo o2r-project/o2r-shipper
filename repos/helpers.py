@@ -1,6 +1,7 @@
 
 import argparse
 import ast
+import datetime
 import hashlib
 import json
 import logging
@@ -8,6 +9,7 @@ import logging
 import urllib.parse
 import uuid
 import zipstream
+import sys
 
 import bagit
 import requests
@@ -16,6 +18,7 @@ from pymongo import MongoClient, errors
 
 
 __all__ = ['status_note', 'generate_zipstream', 'xstr', 'files_scan_path', 'files_dir_size']
+
 
 # File interaction
 def files_scan_path(filepath):
@@ -64,12 +67,25 @@ def generate_zipstream(path):
         yield chunk
 
 
-def status_note(msgtxt):
-    if type(msgtxt) not in [list, str, dict]:
-        msgtxt = str(msgtxt)
-    if type(msgtxt) is list:
-        msgtxt = ''.join(msgtxt)
-    print(''.join(('[shipper] ', msgtxt)))
+def status_note(msg, **kwargs):
+    if type(msg) is list:
+        msg_str_lst = []
+        for n in msg:
+            msg_str_lst.append(str(n))
+        msg = ''.join(msg_str_lst)
+    else:
+        msg = str(msg)
+    log_buffer = kwargs.get('b', None)
+    debug_arg = kwargs.get('d', None)
+    #date_txt = str(' {:%Y-%m-%d %H:%M:%S}'.format(datetime.datetime.now()))
+    date_txt = str(' {:%Y%m%d.%H%M%S}'.format(datetime.now()))
+    if debug_arg:
+        debug_txt = ''.join(('[debug: ', sys._getframe(1).f_globals['__name__'], ' @ ', sys._getframe(1).f_code.co_name, ']'))
+    else:
+        debug_txt = ''
+    if not log_buffer:
+        print(''.join(('[shipper]', debug_txt, date_txt, ' ', msg)))
+
 
 
 def xstr(s):
