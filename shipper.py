@@ -68,15 +68,15 @@ def shipment_get_one(name):
 def shipment_get_all():
     try:
         cid = request.query.compendium_id
-        answer_list = []
-        for key in db['shipments'].find():
-            answer_list.append(key['id'])
-        response.status = 200
-        response.content_type = 'application/json'
         if cid:
-            answer_list = []
-            for key in db['shipments'].find({'compendium_id': cid}):
-                answer_list.append(key['id'])
+            find_args = {'compendium_id': cid}
+        else:
+            find_args = {}
+        answer_list = []
+        for key in db['shipments'].find(**find_args):
+            answer_list.append(key['id'])
+        response.content_type = 'application/json'
+        response.status = 200
         return json.dumps(answer_list)
     except:
         response.status = 400
