@@ -239,108 +239,114 @@ def shipment_post_new():
                     'status': 'shipped',
                     'md': new_md
                     }
-            current_mongo_doc = db.shipments.insert_one(data)
-            status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
-            status = 200
-            if not data['deposition_id']:
-                # no depot yet, go create one
-                current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
-                if not current_compendium:
-                    status_note('! Invalid compendium id', d=is_debug)
-                    data['status'] = 'error'
-                    status = 400
-                else:
-                    # check if candidate
-                    if 'candidate' in current_compendium:
-                        if current_compendium['candidate'] is True:
-                            status_note('ERC candidate may not be shipped.')
-                            data['status'] = 'error'
-                            status = 403
-                        else:
-                            # Aquire path to files via env var and id:
-                            compendium_files = os.path.normpath(os.path.join(env_compendium_files, data['compendium_id']))
-                            # Determine state of that compendium: Is is a bag or not, zipped, valid, etc:
-                            compendium_state = files_scan_path(compendium_files)
-                            if not compendium_state == 0:
-                                # Case path does not exist:
-                                if compendium_state == 1:
-                                    # Case: Is a bagit bag:
-                                    try:
-                                        bag = bagit.Bag(compendium_files)
-                                        bag.validate()
-                                        status_note(['valid bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
-                                    except bagit.BagValidationError as e:
-                                        status_note(['! invalid bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
-                                        details = []
-                                        for d in e.details:
-                                            details.append(str(d))
-                                            status_note(xstr(d))
-                                        # Exit point for invalid not to be repaired bags
-                                        if not strtobool(data['update_packaging']):
-                                            data['status'] = 'error'
-                                            # update shipment data in database
-                                            db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                                            response.status = 400
-                                            response.content_type = 'application/json'
-                                            return json.dumps({'error': str(details)})
-                                        else:
-                                            status_note('updating bagit bag...')
-                                            # Open bag object and update:
-                                            try:
-                                                bag = bagit.Bag(compendium_files)
-                                                bag.save(manifests=True)
-                                                # Validate a second time to ensure successful update:
-                                                try:
-                                                    bag.validate()
-                                                    status_note(['Valid updated bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
-                                                except bagit.BagValidationError:
-                                                    status_note('! error while validating updated bag')
-                                                    data['status'] = 'error'
-                                                    # update shipment data in database
-                                                    db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                                                    response.status = 400
-                                                    response.content_type = 'application/json'
-                                                    return json.dumps({'error': 'unable to validate updated bag'})
-                                            except Exception as e:
-                                                status_note(['! error while bagging: ', str(e)], d=is_debug)
-                                elif compendium_state == 2:
-                                    # Case: dir is no bagit bag, needs to become a bag first
-                                    try:
-                                        bag = bagit.make_bag(compendium_files)
-                                        bag.save()
-                                        status_note('New bagit bag written')
-                                    except Exception as e:
-                                        status_note(['! error while bagging: ', xstr(e)], d=is_debug)
-                                #elif compendium_state == 3: # would be dealing with zip files...
-                            else:
-                                status_note(['! error, invalid path to compendium: ', compendium_files], d=is_debug)
+            if data['recipient'] not in REPO_LIST_availables_as_IDstr:
+                # that recipient is not available, hence cancel new shipment
+                status_note("! error: recipient not available in configured repos", d=False)
+                data['status'] = 'error'
+                status = 400
+            else:
+                current_mongo_doc = db.shipments.insert_one(data)
+                status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
+                status = 200
+                if not data['deposition_id']:
+                    # no depot yet, go create one
+                    current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
+                    if not current_compendium:
+                        status_note('! Invalid compendium id', d=is_debug)
+                        data['status'] = 'error'
+                        status = 400
+                    else:
+                        # check if candidate
+                        if 'candidate' in current_compendium:
+                            if current_compendium['candidate'] is True:
+                                status_note('ERC candidate may not be shipped.')
                                 data['status'] = 'error'
+                                status = 403
+                            else:
+                                # Aquire path to files via env var and id:
+                                compendium_files = os.path.normpath(os.path.join(env_compendium_files, data['compendium_id']))
+                                # Determine state of that compendium: Is is a bag or not, zipped, valid, etc:
+                                compendium_state = files_scan_path(compendium_files)
+                                if not compendium_state == 0:
+                                    # Case path does not exist:
+                                    if compendium_state == 1:
+                                        # Case: Is a bagit bag:
+                                        try:
+                                            bag = bagit.Bag(compendium_files)
+                                            bag.validate()
+                                            status_note(['valid bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
+                                        except bagit.BagValidationError as e:
+                                            status_note(['! invalid bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
+                                            details = []
+                                            for d in e.details:
+                                                details.append(str(d))
+                                                status_note(xstr(d))
+                                            # Exit point for invalid not to be repaired bags
+                                            if not strtobool(data['update_packaging']):
+                                                data['status'] = 'error'
+                                                # update shipment data in database
+                                                db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                                response.status = 400
+                                                response.content_type = 'application/json'
+                                                return json.dumps({'error': str(details)})
+                                            else:
+                                                status_note('updating bagit bag...')
+                                                # Open bag object and update:
+                                                try:
+                                                    bag = bagit.Bag(compendium_files)
+                                                    bag.save(manifests=True)
+                                                    # Validate a second time to ensure successful update:
+                                                    try:
+                                                        bag.validate()
+                                                        status_note(['Valid updated bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
+                                                    except bagit.BagValidationError:
+                                                        status_note('! error while validating updated bag')
+                                                        data['status'] = 'error'
+                                                        # update shipment data in database
+                                                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                                        response.status = 400
+                                                        response.content_type = 'application/json'
+                                                        return json.dumps({'error': 'unable to validate updated bag'})
+                                                except Exception as e:
+                                                    status_note(['! error while bagging: ', str(e)], d=is_debug)
+                                    elif compendium_state == 2:
+                                        # Case: dir is no bagit bag, needs to become a bag first
+                                        try:
+                                            bag = bagit.make_bag(compendium_files)
+                                            bag.save()
+                                            status_note('New bagit bag written')
+                                        except Exception as e:
+                                            status_note(['! error while bagging: ', xstr(e)], d=is_debug)
+                                    #elif compendium_state == 3: # would be dealing with zip files...
+                                else:
+                                    status_note(['! error, invalid path to compendium: ', compendium_files], d=is_debug)
+                                    data['status'] = 'error'
+                                    # update shipment data in database
+                                    db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                    response.status = 400
+                                    response.content_type = 'application/json'
+                                    return json.dumps({'error': 'invalid path to compendium'})
+                                # Continue with zipping and upload
                                 # update shipment data in database
                                 db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                                response.status = 400
-                                response.content_type = 'application/json'
-                                return json.dumps({'error': 'invalid path to compendium'})
-                            # Continue with zipping and upload
-                            # update shipment data in database
-                            db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                            status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
-                            # Ship to the selected repository
-                            global REPO_TARGET
-                            global REPO_TOKEN
-                            db_find_recipient_from_shipment(str(new_id))
-                            data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
-                            # zip all files in dir and submit as zip:
-                            file_name = '.'.join((str(data['compendium_id']), 'zip'))
-                            REPO_TARGET.add_zip_to_depot(data['deposition_id'], file_name, compendium_files, REPO_TOKEN, env_max_dir_size_mb)
-                            # fetch DL link if available
-                            if hasattr(REPO_TARGET, 'get_dl'):
-                                data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
-                                db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                            # Add metadata that are in compendium in db:
-                            if 'metadata' in current_compendium and 'deposition_id' in data:
-                                REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
-            # update shipment data in database
-            db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
+                                # Ship to the selected repository
+                                global REPO_TARGET
+                                global REPO_TOKEN
+                                db_find_recipient_from_shipment(str(new_id))
+                                data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
+                                # zip all files in dir and submit as zip:
+                                file_name = '.'.join((str(data['compendium_id']), 'zip'))
+                                REPO_TARGET.add_zip_to_depot(data['deposition_id'], file_name, compendium_files, REPO_TOKEN, env_max_dir_size_mb)
+                                # fetch DL link if available
+                                if hasattr(REPO_TARGET, 'get_dl'):
+                                    data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
+                                    db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                # Add metadata that are in compendium in db:
+                                if 'metadata' in current_compendium and 'deposition_id' in data:
+                                    REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
+                # update shipment data in database
+                db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
             # build and send response
             response.status = status
             response.content_type = 'application/json'
@@ -385,7 +391,6 @@ def recipient_get_repo_list():
         return json.dumps(output)
     except:
         raise
-
 
 
 # Session
@@ -472,6 +477,7 @@ def db_find_depotid_from_shipment(shipmentid):
     else:
         return None
 
+
 def db_find_dl_filepath_from_shipment(shipmentid):
     data = db['shipments'].find_one({'id': shipmentid})
     if data is not None:
@@ -486,6 +492,7 @@ def register_repos():
     # 'configured' means both repoclass and token of that repo are available
     global REPO_LIST
     global TOKEN_LIST
+    global REPO_LIST_availables_as_IDstr
     if TOKEN_LIST is None:
         status_note('! no repository tokens available, unable to proceed')
         sys.exit(1)
@@ -505,6 +512,8 @@ def register_repos():
                                     if i.verify_token(TOKEN_LIST[key]):
                                         # add instantiated class module for each repo
                                         REPO_LIST.append(class_obj())
+                                        # add name id of that repo to a list for checking recipients available later
+                                        REPO_LIST_availables_as_IDstr.append(i.get_id())
         if len(REPO_LIST) > 0:
             status_note([str(len(REPO_LIST)), ' repositories configured'])
         else:
@@ -559,6 +568,7 @@ if __name__ == "__main__":
             '\n\ttokens: ', str(TOKEN_LIST)])
         REPO_TARGET = None  # generic repository object
         REPO_LIST = []
+        REPO_LIST_availables_as_IDstr = []
         # load repo classes from /repo and register
         register_repos()
         REPO_TOKEN = ''  # generic secret token from remote api
