@@ -251,7 +251,7 @@ def shipment_post_new():
                 if not data['deposition_id']:
                     # no depot yet, go create one
                     current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
-                    if not current_compendium:
+                    if current_compendium is None:
                         status_note('! Invalid compendium id', d=is_debug)
                         data['status'] = 'error'
                         status = 400
@@ -389,8 +389,21 @@ def recipient_get_repo_list():
             except AttributeError:
                 status_note(['! error: repository class ', xstr(repo), ' @ ', xstr(name), ' is unlabled or has no function to return its label.'], d=is_debug)
         return json.dumps(output)
-    except:
+    except Exception as exc:
         raise
+
+
+#http errors
+@app.error(404)
+def error404(error):
+    response.content_type = 'application/json'
+    return json.dumps(str(error))
+
+
+@app.error(500)
+def error500(error):
+    response.content_type = 'application/json'
+    return json.dumps(str(error))
 
 
 # Session
