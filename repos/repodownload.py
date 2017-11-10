@@ -26,17 +26,5 @@ class RepoClassDownload(Repo):
     def get_dl(self, zip_name, target_path):
         return xstr(target_path)
 
-
-    def create_depot(self, token):
-        # no token needed, since repos is surrogate
-        # function is required to mimic the other repos
-        return None
-        pass
-
-    def add_zip_to_depot(self, deposition_id, zip_name, target_path, token, max_dir_size_mb):
-        # not needed, will be streamed
-        # todo: return DL link
-        pass
-
     def add_metadata(self, deposition_id, md, token):
         pass

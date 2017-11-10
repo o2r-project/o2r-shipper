@@ -27,9 +27,12 @@ import urllib.parse
 import uuid
 import bagit
 import requests
+import warnings
 
-from bottle import *
-from pymongo import MongoClient, errors
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", category=PendingDeprecationWarning)
+    from bottle import *
+    from pymongo import MongoClient, errors
 import inspect
 from repos import *
 from repos.helpers import *
@@ -334,17 +337,28 @@ def shipment_post_new():
                                 global REPO_TARGET
                                 global REPO_TOKEN
                                 db_find_recipient_from_shipment(str(new_id))
-                                data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
-                                # zip all files in dir and submit as zip:
                                 file_name = '.'.join((str(data['compendium_id']), 'zip'))
-                                REPO_TARGET.add_zip_to_depot(data['deposition_id'], file_name, compendium_files, REPO_TOKEN, env_max_dir_size_mb)
-                                # fetch DL link if available
-                                if hasattr(REPO_TARGET, 'get_dl'):
-                                    data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
-                                    db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                                # Add metadata that are in compendium in db:
-                                if 'metadata' in current_compendium and 'deposition_id' in data:
-                                    REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
+                                if not hasattr(REPO_TARGET, 'create_depot'):
+                                    # fetch DL link if available
+                                    if hasattr(REPO_TARGET, 'get_dl'):
+                                        data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
+                                        status_note('started download stream...', d=False)
+                                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
+                                                                upsert=True)
+                                    else:
+                                        status_note('! error, the selected recipient repo class has no method to create a new depot', d=is_debug)
+                                        response.status = 500
+                                        response.content_type = 'application/json'
+                                        return json.dumps(
+                                            {'error': 'recipient repo class misses a method to create a new file depot'})
+                                else:
+                                    data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
+                                    # zip all files in dir and submit as zip:
+
+                                    REPO_TARGET.add_zip_to_depot(data['deposition_id'], file_name, compendium_files, REPO_TOKEN, env_max_dir_size_mb)
+                                    # Add metadata that are in compendium in db:
+                                    if 'metadata' in current_compendium and 'deposition_id' in data:
+                                        REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
                 # update shipment data in database
                 db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
             # build and send response
@@ -363,7 +377,7 @@ def shipment_post_new():
             return json.dumps({'error': 'insufficient permissions (not logged in?)'})
     except requests.exceptions.RequestException as exc:
         raise
-        status_note(['! error: ', xstr(exc.args[0])], d=is_debug)
+        status_note(['! error: ', xstr(exc)], d=is_debug)
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
