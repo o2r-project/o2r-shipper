@@ -553,52 +553,59 @@ def register_repos():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='shipper arguments')
     parser.add_argument('-d', '--debug', help='enable debug mode', required=False, action='store_true', default=False)
-    parser.add_argument('-t', '--token', type=json.loads, help='access tokens', required=True)
+    parser.add_argument('-t', '--token', type=json.loads, help='access tokens', required=False)
     # args parsed:
     args = vars(parser.parse_args())
     status_note(['args: ', xstr(args)])
     global is_debug
     is_debug = args['debug']
     try:
-        with open('config.json') as data_file:
-            config = json.load(data_file)
-        env_mongo_host = os.environ.get('SHIPPER_MONGODB', config['mongodb_host'])
-        env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', config['mongodb_db'])
-        env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
-        env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
-        TOKEN_LIST = []
-        if args is not None:
-            if 'token' in args:
-                if args['token'] is not None:
-                    TOKEN_LIST = args['token']
-                else:
-                    rt = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
-                    if type(rt) is str:
-                        try:
-                            TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens']))
-                        except:
-                            TOKEN_LIST = None
-                            pass
-                    elif type(rt) is dict:
-                        TOKEN_LIST = rt
-        # Get environment variables
-        env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
-        env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
-        env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
-        env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', config['userlevel_min'])
-        env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
-        env_compendium_files = os.path.join(env_file_base_path, 'compendium')
-        env_user_id = None
-        status_note(['loaded environment vars and db config:',
-            '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name,
-            '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port),
-            '\n\ttokens: ', str(TOKEN_LIST)])
-        REPO_TARGET = None  # generic repository object
-        REPO_LIST = []
-        REPO_LIST_availables_as_IDstr = []
-        # load repo classes from /repo and register
-        register_repos()
-        REPO_TOKEN = ''  # generic secret token from remote api
+        if not os.path.isfile('config.json'):
+            status_note('configuration file missing. unable to proceed', d=is_debug)
+            exit(1)
+        else:
+            with open('config.json') as data_file:
+                config = json.load(data_file)
+            env_mongo_host = os.environ.get('SHIPPER_MONGODB', config['mongodb_host'])
+            env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', config['mongodb_db'])
+            env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
+            env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
+            TOKEN_LIST = []
+            rt = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
+            if type(rt) is str:
+                try:
+                    TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens']))
+                except:
+                    TOKEN_LIST = None
+            elif type(rt) is dict:
+                TOKEN_LIST = rt
+            # overwrite if token is given via:
+            if args is not None:
+                if 'token' in args:
+                    if args['token'] is not None:
+                        if args['token'] == {}:
+                            status_note('token argument is empty. unable to proceed', d=is_debug)
+                            exit(1)
+                        else:
+                            TOKEN_LIST = args['token']
+            # Get environment variables
+            env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
+            env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
+            env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
+            env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', config['userlevel_min'])
+            env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
+            env_compendium_files = os.path.join(env_file_base_path, 'compendium')
+            env_user_id = None
+            status_note(['loaded environment vars and db config:',
+                '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name,
+                '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port),
+                '\n\ttokens: ', str(TOKEN_LIST)], d=is_debug)
+            REPO_TARGET = None  # generic repository object
+            REPO_LIST = []
+            REPO_LIST_availables_as_IDstr = []
+            # load repo classes from /repo and register
+            register_repos()
+            REPO_TOKEN = ''  # generic secret token from remote api
     except:
         raise
     # connect to db
