@@ -1,4 +1,5 @@
 tmp/o2r
+*.md.backup
 .vscode
 start_Shipper_with_tokens.cmd
 # Byte-compiled / optimized / DLL files

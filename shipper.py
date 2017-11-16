@@ -414,10 +414,10 @@ def error404(error):
     return json.dumps(str(error))
 
 
-@app.error(500)
-def error500(error):
-    response.content_type = 'application/json'
-    return json.dumps(str(error))
+#@app.error(500)
+#def error500(error):
+#    response.content_type = 'application/json'
+#    return json.dumps(str(error))
 
 
 # Session

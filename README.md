@@ -36,7 +36,7 @@ This argument will be preferred, even if there are tokens available through conf
 
 Example:
 
-    docker build -t o2r-shipper
+    docker build . -t o2r-shipper
     docker run --rm -v $(pwd)/o2r-shipper -t {ACCESS_TOKENS}
 
 ## 2. Endpoint at o2r web API:

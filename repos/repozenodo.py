@@ -2,9 +2,9 @@ from .repoclass import *
 from .helpers import *
 
 # Repository Zenodo.org Sandbox
-HOST = "https://sandbox.zenodo.org/api"  # api base url
-ID = 'zenodo_sandbox'
-LABEL = "Zenodo Sandbox"
+HOST = "https://zenodo.org/api"  # api base url
+ID = 'zenodo'
+LABEL = "Zenodo"
 
 
 class RepoClassZenodo(Repo):
@@ -135,6 +135,8 @@ class RepoClassZenodo(Repo):
             status_note(['! failed to submit metadata: ', xstr(exc.args[0])])
 
     def publish(shipmentid, token):
+        return None
+        ##### remove to activate permenent publishments on non-sandbox
         try:
             global HOST
             current_depot = db_find_depotid_from_shipment(shipmentid)
