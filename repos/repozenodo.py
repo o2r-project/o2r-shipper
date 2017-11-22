@@ -23,7 +23,7 @@ class RepoClassZenodo(Repo):
             global ID
             # get file id from bucket url:
             headers = {"Content-Type": "application/json"}
-            r = requests.get(''.join((HOST, '/deposit/depositions/', '?access_token=', token)), headers=headers, verify=True, timeout=3)
+            r = requests.get(''.join((HOST, '/deposit/depositions', '?access_token=', token)), headers=headers, verify=True, timeout=3)
             status_note(['<', ID, '> token verification: ', xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
                 return True
