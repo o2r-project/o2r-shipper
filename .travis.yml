@@ -12,12 +12,13 @@ before_install:
 install:
   - pip install -U pytest requests
 before_script:
+  - mkdir /tmp/o2r
   - docker run --name mongodb -d -p 27017:27017 mongo:3.4
-  - docker run --name testloader -d -p 8088:8088 --link mongodb:mongodb -v $HOME:/tmp/o2r -e LOADER_MONGODB=mongodb://mongodb:27017 -e DEBUG=* o2rproject/o2r-loader:latest
-  - docker run --name testmuncher -d -p 8080:8080 --link mongodb:mongodb -v $HOME:/tmp/o2r -v /var/run/docker.sock:/var/run/docker.sock -e MUNCHER_MONGODB=mongodb://mongodb:27017 -e DEBUG=muncher,muncher:* o2rproject/o2r-muncher:latest
+  - docker run --name testloader  -d -p 8088:8088 --link mongodb:mongodb -v /tmp/o2r:/tmp/o2r -v /var/run/docker.sock:/var/run/docker.sock -e LOADER_MONGODB=mongodb://mongodb:27017  -e DEBUG=* o2rproject/o2r-loader:latest
+  - docker run --name testmuncher -d -p 8080:8080 --link mongodb:mongodb -v /tmp/o2r:/tmp/o2r -v /var/run/docker.sock:/var/run/docker.sock -e MUNCHER_MONGODB=mongodb://mongodb:27017 -e DEBUG=muncher,muncher:* o2rproject/o2r-muncher:latest
   - docker build --tag shipper .
   - |-
-    docker run --name testshipper -t -d -p 8087:8087 --link mongodb:mongodb -v $HOME:/tmp/o2r -e SHIPPER_REPO_TOKENS='{"download": "none"}' -e SHIPPER_BOTTLE_HOST=0.0.0.0 -e SHIPPER_MONGODB=mongodb://mongodb:27017/ shipper
+    docker run --name testshipper -t -d -p 8087:8087 --link mongodb:mongodb -v /tmp/o2r:/tmp/o2r -e SHIPPER_REPO_TOKENS='{"download": "none"}' -e SHIPPER_BOTTLE_HOST=0.0.0.0 -e SHIPPER_MONGODB=mongodb://mongodb:27017/ shipper
   - sleep 10
 script:
   - pytest
