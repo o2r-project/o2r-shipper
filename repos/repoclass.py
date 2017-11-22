@@ -19,5 +19,15 @@ import zipstream
 
 # shipper's generic parent class for repository api wrappers
 class Repo:
-    def __init__(self):
-        pass
+
+    @staticmethod
+    def get_host(HOST):
+        return str(HOST)
+
+    @staticmethod
+    def get_label(LABEL):
+        return str(LABEL)
+
+    @staticmethod
+    def get_id(ID):
+        return str(ID)

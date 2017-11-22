@@ -1,23 +1,24 @@
 from .repoclass import *
 from .helpers import *
 
-# Repository Zenodo.org Sandbox
-HOST = "https://zenodo.org/api"  # api base url
-ID = 'zenodo'
-LABEL = "Zenodo"
-
 
 class RepoClassZenodo(Repo):
+    def __init__(self):
+        self.HOST = "https://zenodo.org/api"  # api base url
+        self.LABEL = "Zenodo"
+        self.ID = 'zenodo'
+
     def get_host(self):
-        return str(HOST)
+        Repo.get_host(self.HOST)
 
     def get_label(self):
-        return str(LABEL)
+        Repo.get_label(self.LABEL)
 
     def get_id(self):
-        return str(ID)
+        Repo.get_id(self.ID)
 
     def verify_token(self, token):
+        print("testetst")
         try:
             global HOST
             global ID
@@ -25,6 +26,7 @@ class RepoClassZenodo(Repo):
             headers = {"Content-Type": "application/json"}
             r = requests.get(''.join((HOST, '/deposit/depositions', '?access_token=', token)), headers=headers, verify=True, timeout=3)
             status_note(['<', ID, '> token verification: ', xstr(r.status_code), ' ', xstr(r.reason)])
+            print("####" + str(host))
             if r.status_code == 200:
                 return True
             elif r.status_code == 401:

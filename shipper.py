@@ -71,17 +71,17 @@ def shipment_get_one(name):
 def shipment_get_all():
     try:
         cid = request.query.compendium_id
+        find_args = {}
         if cid:
-            find_args = {'compendium_id': cid}
-        else:
-            find_args = {}
+            find_args.update({'compendium_id': cid})
         answer_list = []
-        for key in db['shipments'].find(**find_args):
+        for key in db['shipments'].find(find_args):
             answer_list.append(key['id'])
         response.content_type = 'application/json'
         response.status = 200
         return json.dumps(answer_list)
-    except:
+    except Exception as exc:
+        status_note(str(exc), d=is_debug)
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
@@ -336,7 +336,6 @@ def shipment_post_new():
                                 # Ship to the selected repository
                                 global REPO_TARGET
                                 global REPO_TOKEN
-                                db_find_recipient_from_shipment(str(new_id))  #todo: shouldnt this be in request already?
                                 file_name = '.'.join((str(data['compendium_id']), 'zip'))
                                 if not hasattr(REPO_TARGET, 'create_depot'):
                                     # fetch DL link if available
@@ -522,30 +521,31 @@ def register_repos():
     if TOKEN_LIST is None:
         status_note('! no repository tokens available, unable to proceed')
         sys.exit(1)
-        #return None
-    try:
-        for name, obj in inspect.getmembers(sys.modules[__name__]):
-            if name.startswith('repo'):
-                for n, class_obj in inspect.getmembers(obj):
-                    if n.startswith('RepoClass'):
-                        #print("classes:" + str(n))  # debug
-                        i = class_obj()
-                        for key in TOKEN_LIST:
-                            if key == i.get_id():
-                                # see if function to verify the token exists in repo class:
-                                if hasattr(i, 'verify_token'):
-                                    # only add to list, if valid token:
-                                    if i.verify_token(TOKEN_LIST[key]):
-                                        # add instantiated class module for each repo
-                                        REPO_LIST.append(class_obj())
-                                        # add name id of that repo to a list for checking recipients available later
-                                        REPO_LIST_availables_as_IDstr.append(i.get_id())
-        if len(REPO_LIST) > 0:
-            status_note([str(len(REPO_LIST)), ' repositories configured'])
-        else:
-            status_note('! no repositories configured')
-    except:
-        raise
+    else:
+        try:
+            for name, obj in inspect.getmembers(sys.modules[__name__]):
+                if name.startswith('repo'):
+                    for n, class_obj in inspect.getmembers(obj):
+                        if n.startswith('RepoClass'):
+                            i = class_obj()
+                            #print("###########" + str(i))
+                            for key in TOKEN_LIST:
+                                #print("####************" + str(key))
+                                if key == i.get_id():
+                                    # see if function to verify the token exists in repo class:
+                                    if hasattr(i, 'verify_token'):
+                                        # only add to list, if valid token:
+                                        if i.verify_token(TOKEN_LIST[key]):
+                                            # add instantiated class module for each repo
+                                            REPO_LIST.append(class_obj())
+                                            # add name id of that repo to a list for checking recipients available later
+                                            REPO_LIST_availables_as_IDstr.append(i.get_id())
+            if len(REPO_LIST) > 0:
+                status_note([str(len(REPO_LIST)), ' repositories configured'])
+            else:
+                status_note('! no repositories configured')
+        except:
+            raise
 
 
 # Main
