@@ -251,7 +251,7 @@ def shipment_post_new():
                 current_mongo_doc = db.shipments.insert_one(data)
                 status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
                 status = 200
-                if not data['deposition_id']:
+                if data['deposition_id'] is None or data['deposition_id'] == {}:
                     # no depot yet, go create one
                     current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
                     if current_compendium is None:
@@ -336,7 +336,7 @@ def shipment_post_new():
                                 # Ship to the selected repository
                                 global REPO_TARGET
                                 global REPO_TOKEN
-                                db_find_recipient_from_shipment(str(new_id))
+                                db_find_recipient_from_shipment(str(new_id))  #todo: shouldnt this be in request already?
                                 file_name = '.'.join((str(data['compendium_id']), 'zip'))
                                 if not hasattr(REPO_TARGET, 'create_depot'):
                                     # fetch DL link if available
@@ -354,7 +354,6 @@ def shipment_post_new():
                                 else:
                                     data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
                                     # zip all files in dir and submit as zip:
-
                                     REPO_TARGET.add_zip_to_depot(data['deposition_id'], file_name, compendium_files, REPO_TOKEN, env_max_dir_size_mb)
                                     # Add metadata that are in compendium in db:
                                     if 'metadata' in current_compendium and 'deposition_id' in data:
@@ -408,10 +407,10 @@ def recipient_get_repo_list():
 
 
 #http errors
-@app.error(404)
-def error404(error):
-    response.content_type = 'application/json'
-    return json.dumps(str(error))
+#@app.error(404)
+#def error404(error):
+#    response.content_type = 'application/json'
+#    return json.dumps(str(error))
 
 
 #@app.error(500)

@@ -37,7 +37,7 @@ class RepoClassZenodo(Repo):
             global HOST
             # create new empty upload depot:
             headers = {"Content-Type": "application/json"}
-            r = requests.post(''.join((HOST, '/deposit/depositions/?access_token=', token)), data='{}', headers=headers)
+            r = requests.post(''.join((HOST, '/deposit/depositions?access_token=', token)), data='{}', headers=headers)
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 201:
                 status_note(['created depot <', xstr(r.json()['id']), '>'])
