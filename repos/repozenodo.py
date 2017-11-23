@@ -194,9 +194,9 @@ class RepoClassZenodo(Repo):
         try:
             # get file id from bucket url:
             status_note(['attempting to delete from <', deposition_id, '>'])
-            headers = {"Content-Type": "application/json"}
-            r = requests.get(''.join((self.HOST, '/deposit/depositions/', deposition_id, '?access_token=', token)),
-                             headers=headers)
+            headers = {'Content-Type': 'application/json',
+                       'Authorization': ''.join(('Bearer ', token))}
+            r = requests.get(''.join((self.HOST, '/deposit/depositions/', deposition_id)), headers=headers)
             # currently: use first and only file
             # todo: delete selected files (parameter is file_id from bucket) OR delete all files form depot
             if file_id is None:
@@ -222,7 +222,8 @@ class RepoClassZenodo(Repo):
     def del_depot(self, deposition_id, token):
         # DELETE /api/deposit/depositions/:id
         try:
-            headers = {"Content-Type": "application/json"}
+            headers = {'Content-Type': 'application/json',
+                       'Authorization': ''.join(('Bearer ', token))}
             r = requests.delete(''.join((self.HOST, '/deposit/depositions/', deposition_id), headers=headers))
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 204:
