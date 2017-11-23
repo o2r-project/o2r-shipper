@@ -20,21 +20,25 @@ class RepoClassZenodo(Repo):
     def verify_token(self, token):
         try:
             # get file id from bucket url:
-            headers = {"Content-Type": "application/json"}
-            r = requests.get(''.join((self.HOST, '/deposit/depositions', '?access_token=', token)), headers=headers, verify=True, timeout=3)
+            headers = {'Content-Type': 'application/json',
+                       'Authorization': ''.join(('Bearer ', token))}
+            r = requests.get(''.join((self.HOST, '/deposit/depositions')), headers=headers, verify=True, timeout=3)
             status_note(['<', self.ID, '> token verification: ', xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
                 return True
             elif r.status_code == 401:
                 return False
-        except:
-            raise
+        except Exception as exc:
+            status_note(['! error, ', str(exc)])
+            return False
+            #raise
 
     def create_depot(self, token):
         try:
             # create new empty upload depot:
-            headers = {"Content-Type": "application/json"}
-            r = requests.post(''.join((self.HOST, '/deposit/depositions?access_token=', token)), data='{}', headers=headers)
+            headers = {'Content-Type': 'application/json',
+                       'Authorization': ''.join(('Bearer ', token))}
+            r = requests.post(''.join((self.HOST, '/deposit/depositions')), data='{}', headers=headers)
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 201:
                 status_note(['created depot <', xstr(r.json()['id']), '>'])
@@ -54,8 +58,9 @@ class RepoClassZenodo(Repo):
             fsum = files_dir_size(target_path)
             if fsum <= max_dir_size_mb:
                 # get bucket url:
-                headers = {"Content-Type": "application/json"}
-                r = requests.get(''.join((self.HOST, '/deposit/depositions/', deposition_id, '?access_token=', token)),
+                headers = {'Content-Type': 'application/json',
+                           'Authorization': ''.join(('Bearer ', token))}
+                r = requests.get(''.join((self.HOST, '/deposit/depositions/', deposition_id)),
                                  headers=headers)
                 status_note([xstr(r.status_code), ' ', xstr(r.reason)])
                 bucket_url = ''
@@ -107,8 +112,9 @@ class RepoClassZenodo(Repo):
                 md = md[self.ID]
             except Exception as e:
                 status_note(['! error while unwrapping MD object from db: ', xstr(e)])
-            headers = {"Content-Type": "application/json"}
-            r = requests.put(''.join((self.HOST, '/deposit/depositions/', str(deposition_id), '?access_token=', token)),
+            headers = {'Content-Type': 'application/json',
+                       'Authorization': ''.join(('Bearer ', token))}
+            r = requests.put(''.join((self.HOST, '/deposit/depositions/', str(deposition_id))),
                              data=json.dumps(md), headers=headers)
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
@@ -131,8 +137,8 @@ class RepoClassZenodo(Repo):
     def publish(self, shipmentid, token):
         try:
             current_depot = db_find_depotid_from_shipment(shipmentid)
-            r = requests.post(''.join((self.HOST, '/deposit/depositions/', current_depot, '/actions/publish?access_token=',
-                                       token)))
+            headers = {'Authorization': ''.join(('Bearer ', token))}
+            r = requests.post(''.join((self.HOST, '/deposit/depositions/', current_depot, '/actions/publish')), headers=headers)
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 202:
                 db.shipments.update_one({'id': shipmentid}, {'$set': {'status': 'published'}}, upsert=True)
@@ -146,10 +152,10 @@ class RepoClassZenodo(Repo):
         except:
             raise
 
-
     def create_empty_depot(self, deposition_id, token):
         try:
-            r = requests.delete(''.join((self.HOST, '/deposit/depositions/', deposition_id, '?access_token=', token)))
+            headers = {'Authorization': ''.join(('Bearer ', token))}
+            r = requests.delete(''.join((self.HOST, '/deposit/depositions/', deposition_id)), headers=headers)
             if r.status_code == 204:
                 status_note([xstr(r.status_code), ' removed depot <', deposition_id, '>'])
             else:
@@ -160,9 +166,10 @@ class RepoClassZenodo(Repo):
     def get_list_of_files_from_depot(self, deposition_id, token):
         try:
             # get file id from bucket url:
-            headers = {"Content-Type": "application/json"}
-            r = requests.get(''.join((self.HOST, '/deposit/depositions/', deposition_id, '?access_token=', token)),
-                             headers=headers)
+            headers = {'Content-Type': 'application/json',
+                       'Authorization': ''.join(('Bearer ', token))}
+            r = requests.get(''.join((self.HOST, '/deposit/depositions/', deposition_id)), headers=headers)
+
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
                 if 'files' in r.json():
@@ -215,8 +222,8 @@ class RepoClassZenodo(Repo):
     def del_depot(self, deposition_id, token):
         # DELETE /api/deposit/depositions/:id
         try:
-
-            r = requests.delete(''.join((self.HOST, '/deposit/depositions/', deposition_id, '?access_token=', token)))
+            headers = {"Content-Type": "application/json"}
+            r = requests.delete(''.join((self.HOST, '/deposit/depositions/', deposition_id), headers=headers))
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 204:
                 status_note(['deleted depot <', deposition_id, '>'])
