@@ -1,26 +1,26 @@
 from .repoclass import *
 from .helpers import *
 
+
 # Download repo surrogate
-HOST = ""
-ID = "download"
-LABEL = "Download"
-
-
 class RepoClassDownload(Repo):
+    def __init__(self):
+        self.HOST = ""
+        self.ID = 'download'
+        self.LABEL = "Download"
+
     def get_host(self):
-        return str(HOST)
+        return str(self.HOST)
 
     def get_label(self):
-        return str(LABEL)
+        return str(self.LABEL)
 
     def get_id(self):
-        return str(ID)
+        return str(self.ID)
 
     def verify_token(self, token):
-        global ID
         # always valid, since repo is a surrogate without token
-        status_note(['<', ID, '> (surrogate) OK'])
+        status_note(['<', self.ID, '> (surrogate) OK'])
         return True
 
     def get_dl(self, zip_name, target_path):

@@ -17,17 +17,9 @@ import requests
 import zipstream
 
 
-# shipper's generic parent class for repository api wrappers
+# shipper's generic parent class for repository api wrappers and provider for imported libs
 class Repo:
 
     @staticmethod
-    def get_host(HOST):
-        return str(HOST)
-
-    @staticmethod
-    def get_label(LABEL):
-        return str(LABEL)
-
-    @staticmethod
-    def get_id(ID):
-        return str(ID)
+    def is_parent():
+        return True

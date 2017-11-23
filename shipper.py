@@ -239,18 +239,22 @@ def shipment_post_new():
                     'recipient': request.forms.get('recipient'),
                     'last_modified': str(datetime.now()),
                     'user': user_entitled,
-                    'status': 'shipped',
+                    'status': 'to be shipped',
                     'md': new_md
                     }
+            current_mongo_doc = db.shipments.insert_one(data)
+            status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
+            status = 200
             if data['recipient'] not in REPO_LIST_availables_as_IDstr:
                 # that recipient is not available, hence cancel new shipment
                 status_note("! error: recipient not available in configured repos", d=False)
                 data['status'] = 'error'
                 status = 400
             else:
-                current_mongo_doc = db.shipments.insert_one(data)
-                status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
-                status = 200
+                # set REPO TARGET object from REPO LIST:
+                global REPO_TARGET
+                global REPO_TOKEN
+                db_find_recipient_from_shipment(str(new_id))
                 if data['deposition_id'] is None or data['deposition_id'] == {}:
                     # no depot yet, go create one
                     current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
@@ -260,7 +264,11 @@ def shipment_post_new():
                         status = 400
                     else:
                         # check if candidate
-                        if 'candidate' in current_compendium:
+                        if 'candidate' not in current_compendium:
+                            status_note('no <candidate> element in db doc for that compendium', d=is_debug)
+                            data['status'] = 'error'
+                            status = 403
+                        else:
                             if current_compendium['candidate'] is True:
                                 status_note('ERC candidate may not be shipped.')
                                 data['status'] = 'error'
@@ -334,14 +342,13 @@ def shipment_post_new():
                                 db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
                                 status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
                                 # Ship to the selected repository
-                                global REPO_TARGET
-                                global REPO_TOKEN
                                 file_name = '.'.join((str(data['compendium_id']), 'zip'))
                                 if not hasattr(REPO_TARGET, 'create_depot'):
                                     # fetch DL link if available
                                     if hasattr(REPO_TARGET, 'get_dl'):
                                         data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
                                         status_note('started download stream...', d=False)
+                                        data['status'] = 'shipped'
                                         db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
                                                                 upsert=True)
                                     else:
@@ -357,6 +364,9 @@ def shipment_post_new():
                                     # Add metadata that are in compendium in db:
                                     if 'metadata' in current_compendium and 'deposition_id' in data:
                                         REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
+                                        data['status'] = 'shipped'
+                                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
+                                                            upsert=True)
                 # update shipment data in database
                 db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
             # build and send response
@@ -481,7 +491,6 @@ def db_find_recipient_from_shipment(shipmentid):
             if 'recipient' in data:
                 # check if in repo list
                 for repo in REPO_LIST:
-                    #print(repo.__class__.__name__)
                     if data['recipient'].lower() == repo.get_id():
                         REPO_TARGET = repo
                         try:
@@ -489,9 +498,11 @@ def db_find_recipient_from_shipment(shipmentid):
                         except:
                             status_note([' ! missing token for', repo.get_id()])
             else:
-                status_note(' ! no recipient specified in db dataset')
+                status_note(' ! no recipient specified in db dataset', d=is_debug)
+        else:
+            status_note(' ! no shipment specified in db dataset', d=is_debug)
     else:
-        status_note(' ! error retrieving shipment id and recipient')
+        status_note(' ! error retrieving shipment id and recipient', d=is_debug)
 
 
 def db_find_depotid_from_shipment(shipmentid):
@@ -523,23 +534,25 @@ def register_repos():
         sys.exit(1)
     else:
         try:
+            shortlist = []
             for name, obj in inspect.getmembers(sys.modules[__name__]):
                 if name.startswith('repo'):
                     for n, class_obj in inspect.getmembers(obj):
-                        if n.startswith('RepoClass'):
-                            i = class_obj()
-                            #print("###########" + str(i))
-                            for key in TOKEN_LIST:
-                                #print("####************" + str(key))
-                                if key == i.get_id():
-                                    # see if function to verify the token exists in repo class:
-                                    if hasattr(i, 'verify_token'):
-                                        # only add to list, if valid token:
-                                        if i.verify_token(TOKEN_LIST[key]):
-                                            # add instantiated class module for each repo
-                                            REPO_LIST.append(class_obj())
-                                            # add name id of that repo to a list for checking recipients available later
-                                            REPO_LIST_availables_as_IDstr.append(i.get_id())
+                        if n.startswith('RepoClass') and class_obj not in shortlist:
+                            shortlist.append(class_obj)
+            # unique list without import cross references
+            for class_obj in shortlist:
+                i = class_obj()
+                for listed_token in TOKEN_LIST:
+                    if listed_token == i.get_id():
+                        # see if function to verify the token exists in repo class:
+                        if hasattr(i, 'verify_token'):
+                            # only add to list, if valid token:
+                            if i.verify_token(TOKEN_LIST[listed_token]):
+                                # add instantiated class module for each repo
+                                REPO_LIST.append(class_obj())
+                                # add name id of that repo to a list for checking recipients available later
+                                REPO_LIST_availables_as_IDstr.append(i.get_id())
             if len(REPO_LIST) > 0:
                 status_note([str(len(REPO_LIST)), ' repositories configured'])
             else:
