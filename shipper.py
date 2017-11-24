@@ -71,17 +71,17 @@ def shipment_get_one(name):
 def shipment_get_all():
     try:
         cid = request.query.compendium_id
+        find_args = {}
         if cid:
-            find_args = {'compendium_id': cid}
-        else:
-            find_args = {}
+            find_args.update({'compendium_id': cid})
         answer_list = []
-        for key in db['shipments'].find(**find_args):
+        for key in db['shipments'].find(find_args):
             answer_list.append(key['id'])
         response.content_type = 'application/json'
         response.status = 200
         return json.dumps(answer_list)
-    except:
+    except Exception as exc:
+        status_note(str(exc), d=is_debug)
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
@@ -110,7 +110,7 @@ def shipment_get_file_id(shipmentid):
         global REPO_TARGET
         global REPO_TOKEN
         current_depot = db_find_depotid_from_shipment(shipmentid)
-        db_find_recipient_from_shipment(shipmentid)
+        db_fill_repo_target_and_list(shipmentid)
         headers = {"Content-Type": "application/json"}
         r = requests.get(''.join((REPO_TARGET.get_host(), '/deposit/depositions/', current_depot, '?access_token=', REPO_TOKEN)), headers=headers)
         if 'files' in r.json():
@@ -174,9 +174,9 @@ def shipment_get_publishment(shipmentid):
     try:
         global REPO_TARGET
         global REPO_TOKEN
-        db_find_recipient_from_shipment(shipmentid)
+        db_fill_repo_target_and_list(shipmentid)
         current_depot = db_find_depotid_from_shipment(shipmentid)
-        db_find_recipient_from_shipment(shipmentid)
+        db_fill_repo_target_and_list(shipmentid)
         REPO_TARGET.get_list_of_files_from_depot(current_depot, REPO_TOKEN)
         REPO_TARGET.publish(shipmentid, REPO_TOKEN)
     except:
@@ -190,8 +190,11 @@ def shipment_del_file_id(shipmentid, fileid):
         global REPO_TARGET
         global REPO_TOKEN
         current_depot = db_find_depotid_from_shipment(shipmentid)
-        db_find_recipient_from_shipment(shipmentid)
-        REPO_TARGET.del_from_depot(current_depot, fileid, REPO_TOKEN)
+        db_fill_repo_target_and_list(shipmentid)
+        if hasattr(REPO_TARGET, 'del_from_depot'):
+            if REPO_TARGET.del_from_depot(current_depot, fileid, REPO_TOKEN) == 204:
+                response.status = 204
+                return '', 204
     except:
         raise
 
@@ -239,18 +242,22 @@ def shipment_post_new():
                     'recipient': request.forms.get('recipient'),
                     'last_modified': str(datetime.now()),
                     'user': user_entitled,
-                    'status': 'shipped',
+                    'status': 'to be shipped',
                     'md': new_md
                     }
+            current_mongo_doc = db.shipments.insert_one(data)
+            status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
+            status = 200
             if data['recipient'] not in REPO_LIST_availables_as_IDstr:
                 # that recipient is not available, hence cancel new shipment
                 status_note("! error: recipient not available in configured repos", d=False)
                 data['status'] = 'error'
                 status = 400
             else:
-                current_mongo_doc = db.shipments.insert_one(data)
-                status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
-                status = 200
+                # set REPO TARGET object from REPO LIST:
+                global REPO_TARGET
+                global REPO_TOKEN
+                db_fill_repo_target_and_list(str(new_id))
                 if data['deposition_id'] is None or data['deposition_id'] == {}:
                     # no depot yet, go create one
                     current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
@@ -260,7 +267,11 @@ def shipment_post_new():
                         status = 400
                     else:
                         # check if candidate
-                        if 'candidate' in current_compendium:
+                        if 'candidate' not in current_compendium:
+                            status_note('no <candidate> element in db doc for that compendium', d=is_debug)
+                            data['status'] = 'error'
+                            status = 403
+                        else:
                             if current_compendium['candidate'] is True:
                                 status_note('ERC candidate may not be shipped.')
                                 data['status'] = 'error'
@@ -334,15 +345,13 @@ def shipment_post_new():
                                 db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
                                 status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
                                 # Ship to the selected repository
-                                global REPO_TARGET
-                                global REPO_TOKEN
-                                db_find_recipient_from_shipment(str(new_id))  #todo: shouldnt this be in request already?
                                 file_name = '.'.join((str(data['compendium_id']), 'zip'))
                                 if not hasattr(REPO_TARGET, 'create_depot'):
                                     # fetch DL link if available
                                     if hasattr(REPO_TARGET, 'get_dl'):
                                         data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
                                         status_note('started download stream...', d=False)
+                                        data['status'] = 'shipped'
                                         db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
                                                                 upsert=True)
                                     else:
@@ -358,6 +367,9 @@ def shipment_post_new():
                                     # Add metadata that are in compendium in db:
                                     if 'metadata' in current_compendium and 'deposition_id' in data:
                                         REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
+                                        data['status'] = 'shipped'
+                                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
+                                                            upsert=True)
                 # update shipment data in database
                 db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
             # build and send response
@@ -393,16 +405,17 @@ def shipment_post_new():
 def recipient_get_repo_list():
     try:
         global REPO_LIST
-        response.status = 200
-        response.content_type = 'application/json'
         output = {'recipients': []}
         for repo in REPO_LIST:
             try:
                 output['recipients'].append({'id': xstr(repo.get_id()), 'label': repo.get_label()})
             except AttributeError:
                 status_note(['! error: repository class ', xstr(repo), ' @ ', xstr(name), ' is unlabled or has no function to return its label.'], d=is_debug)
+        response.status = 200
+        response.content_type = 'application/json'
         return json.dumps(output)
     except Exception as exc:
+        status_note(['! error: ', xstr(exc)], d=is_debug)
         raise
 
 
@@ -471,7 +484,7 @@ def session_user_entitled(cookie, min_lvl):
         return None
 
 
-def db_find_recipient_from_shipment(shipmentid):
+def db_fill_repo_target_and_list(shipmentid):
     global REPO_TARGET
     global REPO_TOKEN
     global REPO_LIST
@@ -482,7 +495,6 @@ def db_find_recipient_from_shipment(shipmentid):
             if 'recipient' in data:
                 # check if in repo list
                 for repo in REPO_LIST:
-                    #print(repo.__class__.__name__)
                     if data['recipient'].lower() == repo.get_id():
                         REPO_TARGET = repo
                         try:
@@ -490,9 +502,11 @@ def db_find_recipient_from_shipment(shipmentid):
                         except:
                             status_note([' ! missing token for', repo.get_id()])
             else:
-                status_note(' ! no recipient specified in db dataset')
+                status_note(' ! no recipient specified in db dataset', d=is_debug)
+        else:
+            status_note(' ! no shipment specified in db dataset', d=is_debug)
     else:
-        status_note(' ! error retrieving shipment id and recipient')
+        status_note(' ! error retrieving shipment id and recipient', d=is_debug)
 
 
 def db_find_depotid_from_shipment(shipmentid):
@@ -522,30 +536,47 @@ def register_repos():
     if TOKEN_LIST is None:
         status_note('! no repository tokens available, unable to proceed')
         sys.exit(1)
-        #return None
+    else:
+        try:
+            shortlist = []
+            for name, obj in inspect.getmembers(sys.modules[__name__]):
+                if name.startswith('repo'):
+                    for n, class_obj in inspect.getmembers(obj):
+                        if n.startswith('RepoClass') and class_obj not in shortlist:
+                            shortlist.append(class_obj)
+            # unique list without import cross references
+            for class_obj in shortlist:
+                i = class_obj()
+                for listed_token in TOKEN_LIST:
+                    if listed_token == i.get_id():
+                        # see if function to verify the token exists in repo class:
+                        if hasattr(i, 'verify_token'):
+                            # only add to list, if valid token:
+                            if i.verify_token(TOKEN_LIST[listed_token]):
+                                # add instantiated class module for each repo
+                                REPO_LIST.append(class_obj())
+                                # add name id of that repo to a list for checking recipients available later
+                                REPO_LIST_availables_as_IDstr.append(i.get_id())
+            if len(REPO_LIST) > 0:
+                status_note([str(len(REPO_LIST)), ' repositories configured'])
+            else:
+                status_note('! no repositories configured')
+        except:
+            raise
+
+
+def save_get_from_config(element, config_dict):
     try:
-        for name, obj in inspect.getmembers(sys.modules[__name__]):
-            if name.startswith('repo'):
-                for n, class_obj in inspect.getmembers(obj):
-                    if n.startswith('RepoClass'):
-                        #print("classes:" + str(n))  # debug
-                        i = class_obj()
-                        for key in TOKEN_LIST:
-                            if key == i.get_id():
-                                # see if function to verify the token exists in repo class:
-                                if hasattr(i, 'verify_token'):
-                                    # only add to list, if valid token:
-                                    if i.verify_token(TOKEN_LIST[key]):
-                                        # add instantiated class module for each repo
-                                        REPO_LIST.append(class_obj())
-                                        # add name id of that repo to a list for checking recipients available later
-                                        REPO_LIST_availables_as_IDstr.append(i.get_id())
-        if len(REPO_LIST) > 0:
-            status_note([str(len(REPO_LIST)), ' repositories configured'])
+        if config_dict is None:
+            return None
         else:
-            status_note('! no repositories configured')
-    except:
-        raise
+            if element in config_dict:
+                return config_dict[element]
+            else:
+                return None
+    except Exception as erc:
+        status_note(['! error, ', xstr(exc)], d=is_debug)
+        return None
 
 
 # Main
@@ -565,15 +596,15 @@ if __name__ == "__main__":
         else:
             with open('config.json') as data_file:
                 config = json.load(data_file)
-            env_mongo_host = os.environ.get('SHIPPER_MONGODB', config['mongodb_host'])
-            env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', config['mongodb_db'])
-            env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
-            env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
+            env_mongo_host = os.environ.get('SHIPPER_MONGODB', save_get_from_config('mongodb_host', config))
+            env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', save_get_from_config('mongodb_db', config))
+            env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', save_get_from_config('bottle_host', config))
+            env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', save_get_from_config('bottle_port', config))
             TOKEN_LIST = []
-            rt = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
+            rt = os.environ.get('SHIPPER_REPO_TOKENS', save_get_from_config('repository_tokens', config))
             if type(rt) is str:
                 try:
-                    TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens']))
+                    TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', save_get_from_config('repository_tokens', config)))
                 except:
                     TOKEN_LIST = None
             elif type(rt) is dict:
@@ -584,47 +615,53 @@ if __name__ == "__main__":
                     if args['token'] is not None:
                         if args['token'] == {}:
                             status_note('token argument is empty. unable to proceed', d=is_debug)
-                            exit(1)
+                            sys.exit(1)
                         else:
                             TOKEN_LIST = args['token']
             # Get environment variables
-            env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
-            env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
-            env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
-            env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', config['userlevel_min'])
-            env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
+            env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', save_get_from_config('base_path', config))
+            env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', save_get_from_config('max_size_mb', config))
+            env_session_secret = os.environ.get('SHIPPER_SECRET', save_get_from_config('session_secret', config))
+            env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', save_get_from_config('userlevel_min', config))
+            env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', save_get_from_config('cookie_name', config))
             env_compendium_files = os.path.join(env_file_base_path, 'compendium')
             env_user_id = None
             status_note(['loaded environment vars and db config:',
                 '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name,
-                '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port),
-                '\n\ttokens: ', str(TOKEN_LIST)], d=is_debug)
+                '\n\tbottle: ', env_bottle_host, ':', env_bottle_port,
+                '\n\ttokens: ', TOKEN_LIST], d=is_debug)
             REPO_TARGET = None  # generic repository object
             REPO_LIST = []
             REPO_LIST_availables_as_IDstr = []
             # load repo classes from /repo and register
             register_repos()
             REPO_TOKEN = ''  # generic secret token from remote api
-    except:
-        raise
-    # connect to db
-    try:
-        status_note(['connecting to ', str(env_mongo_host)])
-        client = MongoClient(env_mongo_host, serverSelectionTimeoutMS=12000)
-        db = client[env_mongo_db_name]
-        status_note(['connected. MongoDB server version: ', str(client.server_info()['version'])])
-    except errors.ServerSelectionTimeoutError as exc:
-        status_note(['! error: mongodb timeout error: ', str(exc)])
+    except OSError as oexc:
+        status_note(['! error, unable to process environmental vars. unable to proceed.', xstr(oexc)], d=is_debug)
         sys.exit(1)
     except Exception as exc:
-        status_note(['! error: mongodb connection error: ', str(exc)])
-        print(traceback.format_exc())
+        status_note(['! error, unable to configure shipper. unable to proceed.', xstr(exc)], d=is_debug)
+        sys.exit(1)
+    # connect to db
+    try:
+        status_note(['connecting to ', env_mongo_host], d=is_debug)
+        client = MongoClient(env_mongo_host, serverSelectionTimeoutMS=12000)
+        db = client[env_mongo_db_name]
+        status_note(['connected. MongoDB server version: ', client.server_info()['version']], d=is_debug)
+    except errors.ServerSelectionTimeoutError as texc:
+        status_note(['! error: mongodb timeout error: ', xstr(texc)])
+        sys.exit(1)
+    except Exception as exc:
+        status_note(['! error: mongodb connection error: ', xstr(exc)])
+        status_note(traceback.format_exc(), d=is_debug)
         sys.exit(1)
     # start service
     try:
+        # shipper logo
         status_note(base64.b64decode('IA0KLi0tLS0tLS0tLS0tLS0tLg0KfCAgICAgXy5fICBfICAgIGAuLF9fX19fXw0KfCAgICAobzJyKChfKCAgICAgIF9fXyhfKCkNCnwgIFwnLS06LS0tOi0uICAgLCcNCictLS0tLS0tLS0tLS0tLSc=').decode('utf-8'))
         time.sleep(0.1)
+        # start bottle-gevent
         run(app=app, host=env_bottle_host, port=env_bottle_port, server='gevent', debug=True)
     except Exception as exc:
-        status_note(['! error: bottle server could not be started: ', traceback.format_exc()])
+        status_note(['! error, bottle server could not be started: ', traceback.format_exc()], d=is_debug)
         sys.exit(1)

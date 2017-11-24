@@ -17,7 +17,9 @@ import requests
 import zipstream
 
 
-# shipper's generic parent class for repository api wrappers
+# shipper's generic parent class for repository api wrappers and provider for imported libs
 class Repo:
-    def __init__(self):
-        pass
+
+    @staticmethod
+    def is_parent():
+        return True
