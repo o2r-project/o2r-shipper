@@ -351,9 +351,12 @@ def shipment_post_new():
                                     if hasattr(REPO_TARGET, 'get_dl'):
                                         data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
                                         status_note('started download stream...', d=False)
+
                                         data['status'] = 'shipped'
                                         db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
                                                                 upsert=True)
+                                        shipment_get_dl_file(data['id'])
+                                        return
                                     else:
                                         status_note('! error, the selected recipient repo class has no method to create a new depot', d=is_debug)
                                         response.status = 500
