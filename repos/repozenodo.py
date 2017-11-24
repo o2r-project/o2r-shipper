@@ -169,7 +169,6 @@ class RepoClassZenodo(Repo):
             headers = {'Content-Type': 'application/json',
                        'Authorization': ''.join(('Bearer ', token))}
             r = requests.get(''.join((self.HOST, '/deposit/depositions/', deposition_id)), headers=headers)
-
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 200:
                 if 'files' in r.json():
@@ -203,19 +202,19 @@ class RepoClassZenodo(Repo):
                 # no target file specified, hence delete first file
                 file_id = r.json()['files'][0]['links']['self'].rsplit('/', 1)[-1]
             # make delete request for that file
-            r = requests.delete(
-                ''.join((base, '/deposit/depositions/', deposition_id, '/files/', file_id, '?access_token=', token)))
+            r = requests.delete(''.join((base, '/deposit/depositions/', deposition_id, '/files/', file_id,)))
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
             if r.status_code == 204:
-                status_note(['deleted <', xstr(file_id), '> from <', str(deposition_id), '>'])
+                status_note(['deleted <', xstr(file_id), '> from <', deposition_id, '>'])
             elif r.status_code == 403:
-                status_note(['! insufficient access rights <', str(deposition_id),
+                status_note(['! insufficient access rights <', deposition_id,
                              '>. Cannot delete from an already published deposition.'])
                 status_note(xstr(r.text))
             elif r.status_code == 404:
-                status_note(['failed to retrieve file at >', str(deposition_id), '>'])
+                status_note(['failed to retrieve file at >', deposition_id, '>'])
             else:
                 status_note(xstr(r.text))
+            return r.status_code
         except Exception as exc:
             raise
 

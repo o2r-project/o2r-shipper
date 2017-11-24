@@ -110,7 +110,7 @@ def shipment_get_file_id(shipmentid):
         global REPO_TARGET
         global REPO_TOKEN
         current_depot = db_find_depotid_from_shipment(shipmentid)
-        db_find_recipient_from_shipment(shipmentid)
+        db_fill_repo_target_and_list(shipmentid)
         headers = {"Content-Type": "application/json"}
         r = requests.get(''.join((REPO_TARGET.get_host(), '/deposit/depositions/', current_depot, '?access_token=', REPO_TOKEN)), headers=headers)
         if 'files' in r.json():
@@ -174,9 +174,9 @@ def shipment_get_publishment(shipmentid):
     try:
         global REPO_TARGET
         global REPO_TOKEN
-        db_find_recipient_from_shipment(shipmentid)
+        db_fill_repo_target_and_list(shipmentid)
         current_depot = db_find_depotid_from_shipment(shipmentid)
-        db_find_recipient_from_shipment(shipmentid)
+        db_fill_repo_target_and_list(shipmentid)
         REPO_TARGET.get_list_of_files_from_depot(current_depot, REPO_TOKEN)
         REPO_TARGET.publish(shipmentid, REPO_TOKEN)
     except:
@@ -190,8 +190,11 @@ def shipment_del_file_id(shipmentid, fileid):
         global REPO_TARGET
         global REPO_TOKEN
         current_depot = db_find_depotid_from_shipment(shipmentid)
-        db_find_recipient_from_shipment(shipmentid)
-        REPO_TARGET.del_from_depot(current_depot, fileid, REPO_TOKEN)
+        db_fill_repo_target_and_list(shipmentid)
+        if hasattr(REPO_TARGET, 'del_from_depot'):
+            if REPO_TARGET.del_from_depot(current_depot, fileid, REPO_TOKEN) == 204:
+                response.status = 204
+                return '', 204
     except:
         raise
 
@@ -254,7 +257,7 @@ def shipment_post_new():
                 # set REPO TARGET object from REPO LIST:
                 global REPO_TARGET
                 global REPO_TOKEN
-                db_find_recipient_from_shipment(str(new_id))
+                db_fill_repo_target_and_list(str(new_id))
                 if data['deposition_id'] is None or data['deposition_id'] == {}:
                     # no depot yet, go create one
                     current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
@@ -402,16 +405,17 @@ def shipment_post_new():
 def recipient_get_repo_list():
     try:
         global REPO_LIST
-        response.status = 200
-        response.content_type = 'application/json'
         output = {'recipients': []}
         for repo in REPO_LIST:
             try:
                 output['recipients'].append({'id': xstr(repo.get_id()), 'label': repo.get_label()})
             except AttributeError:
                 status_note(['! error: repository class ', xstr(repo), ' @ ', xstr(name), ' is unlabled or has no function to return its label.'], d=is_debug)
+        response.status = 200
+        response.content_type = 'application/json'
         return json.dumps(output)
     except Exception as exc:
+        status_note(['! error: ', xstr(exc)], d=is_debug)
         raise
 
 
@@ -480,7 +484,7 @@ def session_user_entitled(cookie, min_lvl):
         return None
 
 
-def db_find_recipient_from_shipment(shipmentid):
+def db_fill_repo_target_and_list(shipmentid):
     global REPO_TARGET
     global REPO_TOKEN
     global REPO_LIST
@@ -561,6 +565,20 @@ def register_repos():
             raise
 
 
+def save_get_from_config(element, config_dict):
+    try:
+        if config_dict is None:
+            return None
+        else:
+            if element in config_dict:
+                return config_dict[element]
+            else:
+                return None
+    except Exception as erc:
+        status_note(['! error, ', xstr(exc)], d=is_debug)
+        return None
+
+
 # Main
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='shipper arguments')
@@ -578,15 +596,15 @@ if __name__ == "__main__":
         else:
             with open('config.json') as data_file:
                 config = json.load(data_file)
-            env_mongo_host = os.environ.get('SHIPPER_MONGODB', config['mongodb_host'])
-            env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', config['mongodb_db'])
-            env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', config['bottle_host'])
-            env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', config['bottle_port'])
+            env_mongo_host = os.environ.get('SHIPPER_MONGODB', save_get_from_config('mongodb_host', config))
+            env_mongo_db_name = os.environ.get('SHIPPER_MONGO_NAME', save_get_from_config('mongodb_db', config))
+            env_bottle_host = os.environ.get('SHIPPER_BOTTLE_HOST', save_get_from_config('bottle_host', config))
+            env_bottle_port = os.environ.get('SHIPPER_BOTTLE_PORT', save_get_from_config('bottle_port', config))
             TOKEN_LIST = []
-            rt = os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens'])
+            rt = os.environ.get('SHIPPER_REPO_TOKENS', save_get_from_config('repository_tokens', config))
             if type(rt) is str:
                 try:
-                    TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', config['repository_tokens']))
+                    TOKEN_LIST = json.loads(os.environ.get('SHIPPER_REPO_TOKENS', save_get_from_config('repository_tokens', config)))
                 except:
                     TOKEN_LIST = None
             elif type(rt) is dict:
@@ -597,47 +615,53 @@ if __name__ == "__main__":
                     if args['token'] is not None:
                         if args['token'] == {}:
                             status_note('token argument is empty. unable to proceed', d=is_debug)
-                            exit(1)
+                            sys.exit(1)
                         else:
                             TOKEN_LIST = args['token']
             # Get environment variables
-            env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', config['base_path'])
-            env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', config['max_size_mb'])
-            env_session_secret = os.environ.get('SHIPPER_SECRET', config['session_secret'])
-            env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', config['userlevel_min'])
-            env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', config['cookie_name'])
+            env_file_base_path = os.environ.get('SHIPPER_BASE_PATH', save_get_from_config('base_path', config))
+            env_max_dir_size_mb = os.environ.get('SHIPPER_MAX_DIR_SIZE', save_get_from_config('max_size_mb', config))
+            env_session_secret = os.environ.get('SHIPPER_SECRET', save_get_from_config('session_secret', config))
+            env_user_level_min = os.environ.get('SHIPPER_USERLEVEL_MIN', save_get_from_config('userlevel_min', config))
+            env_cookie_name = os.environ.get('SHIPPER_COOKIE_NAME', save_get_from_config('cookie_name', config))
             env_compendium_files = os.path.join(env_file_base_path, 'compendium')
             env_user_id = None
             status_note(['loaded environment vars and db config:',
                 '\n\tMongoDB: ', env_mongo_host, env_mongo_db_name,
-                '\n\tbottle: ', env_bottle_host, ':', str(env_bottle_port),
-                '\n\ttokens: ', str(TOKEN_LIST)], d=is_debug)
+                '\n\tbottle: ', env_bottle_host, ':', env_bottle_port,
+                '\n\ttokens: ', TOKEN_LIST], d=is_debug)
             REPO_TARGET = None  # generic repository object
             REPO_LIST = []
             REPO_LIST_availables_as_IDstr = []
             # load repo classes from /repo and register
             register_repos()
             REPO_TOKEN = ''  # generic secret token from remote api
-    except:
-        raise
-    # connect to db
-    try:
-        status_note(['connecting to ', str(env_mongo_host)])
-        client = MongoClient(env_mongo_host, serverSelectionTimeoutMS=12000)
-        db = client[env_mongo_db_name]
-        status_note(['connected. MongoDB server version: ', str(client.server_info()['version'])])
-    except errors.ServerSelectionTimeoutError as exc:
-        status_note(['! error: mongodb timeout error: ', str(exc)])
+    except OSError as oexc:
+        status_note(['! error, unable to process environmental vars. unable to proceed.', xstr(oexc)], d=is_debug)
         sys.exit(1)
     except Exception as exc:
-        status_note(['! error: mongodb connection error: ', str(exc)])
-        print(traceback.format_exc())
+        status_note(['! error, unable to configure shipper. unable to proceed.', xstr(exc)], d=is_debug)
+        sys.exit(1)
+    # connect to db
+    try:
+        status_note(['connecting to ', env_mongo_host], d=is_debug)
+        client = MongoClient(env_mongo_host, serverSelectionTimeoutMS=12000)
+        db = client[env_mongo_db_name]
+        status_note(['connected. MongoDB server version: ', client.server_info()['version']], d=is_debug)
+    except errors.ServerSelectionTimeoutError as texc:
+        status_note(['! error: mongodb timeout error: ', xstr(texc)])
+        sys.exit(1)
+    except Exception as exc:
+        status_note(['! error: mongodb connection error: ', xstr(exc)])
+        status_note(traceback.format_exc(), d=is_debug)
         sys.exit(1)
     # start service
     try:
+        # shipper logo
         status_note(base64.b64decode('IA0KLi0tLS0tLS0tLS0tLS0tLg0KfCAgICAgXy5fICBfICAgIGAuLF9fX19fXw0KfCAgICAobzJyKChfKCAgICAgIF9fXyhfKCkNCnwgIFwnLS06LS0tOi0uICAgLCcNCictLS0tLS0tLS0tLS0tLSc=').decode('utf-8'))
         time.sleep(0.1)
+        # start bottle-gevent
         run(app=app, host=env_bottle_host, port=env_bottle_port, server='gevent', debug=True)
     except Exception as exc:
-        status_note(['! error: bottle server could not be started: ', traceback.format_exc()])
+        status_note(['! error, bottle server could not be started: ', traceback.format_exc()], d=is_debug)
         sys.exit(1)
