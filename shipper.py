@@ -149,6 +149,7 @@ def shipment_get_dl_file(shipmentid):
             response.headers['Content-Type'] = 'application/zip'
             response.headers['Content-Disposition'] = ''.join(('attachment; filename=', shipmentid, '.zip'))
             p = os.path.normpath(db_find_dl_filepath_from_shipment(shipmentid))
+            status_note(str(generate_zipstream(p)), d=is_debug)
             return generate_zipstream(p)
     except Exception as exc:
         status_note(['! error: ', xstr(exc.args[0])], d=is_debug)
@@ -355,8 +356,7 @@ def shipment_post_new():
                                         data['status'] = 'shipped'
                                         db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
                                                                 upsert=True)
-                                        shipment_get_dl_file(data['id'])
-                                        return
+                                        return shipment_get_dl_file(data['id'])
                                     else:
                                         status_note('! error, the selected recipient repo class has no method to create a new depot', d=is_debug)
                                         response.status = 500
