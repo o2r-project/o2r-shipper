@@ -162,11 +162,11 @@ def shipment_get_dl_file(shipmentid):
 @app.route('/api/v1/shipment/<shipmentid>/publishment', method='PUT')
 def shipment_put_publishment(shipmentid):
     try:
+        #! once published, cant delete
         global REPO_TARGET
         global REPO_TOKEN
-        #! once published, cant delete
-        #todo make this function in repo and call here
-        REPO_TARGET.publish(REPO_TOKEN)
+        current_depot = db_find_depotid_from_shipment(shipmentid)
+        REPO_TARGET.publish(current_depot, REPO_TOKEN)
     except:
         raise
 
@@ -180,7 +180,6 @@ def shipment_get_publishment(shipmentid):
         current_depot = db_find_depotid_from_shipment(shipmentid)
         db_fill_repo_target_and_list(shipmentid)
         REPO_TARGET.get_list_of_files_from_depot(current_depot, REPO_TOKEN)
-        REPO_TARGET.publish(shipmentid, REPO_TOKEN)
     except:
         raise
 
