@@ -59,6 +59,7 @@ def shipment_get_one(name):
         response.content_type = 'application/json'
         if '_id' in data:
             data.pop('_id', None)
+            data.pop('dl_filepath', None)
         return json.dumps(data)
     else:
         status_note(['user requested non-existing shipment ', name], d=is_debug)
@@ -352,7 +353,6 @@ def shipment_post_new():
                                     if hasattr(REPO_TARGET, 'get_dl'):
                                         data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
                                         status_note('started download stream...', d=False)
-
                                         data['status'] = 'shipped'
                                         db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
                                                                 upsert=True)
