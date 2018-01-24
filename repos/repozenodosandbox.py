@@ -32,7 +32,7 @@ class RepoClassZenodoSandbox(RepoClassZenodo, Repo):
         RepoClassZenodo.add_metadata(self, deposition_id, md, token)
 
     def publish(self, current_depot, token):
-        RepoClassZenodo.publish(self, current_depot, token)
+        return RepoClassZenodo.publish(self, current_depot, token)
 
     def create_empty_depot(self, deposition_id, token):
         RepoClassZenodo.create_empty_depot(self, deposition_id, token)

@@ -140,18 +140,7 @@ class RepoClassZenodo(Repo):
             headers = {'Authorization': ''.join(('Bearer ', token))}
             r = requests.post(''.join((self.HOST, '/deposit/depositions/', current_depot, '/actions/publish')), headers=headers)
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
-            if r.status_code == 202:
-                #db interaction from this module currently unavailable need restructuring via helpers
-                #db.shipments.update_one({'id': shipmentid}, {'$set': {'status': 'published'}}, upsert=True)
-                #db.shipments.update_one({'id': shipmentid}, {'$set': {'doi_url': doi}}, upsert=True)
-                shipmentid = "00000000-0000-0000-0000-000000000000"  # see comments above
-                #response.status = r.status_code
-                #response.content_type = 'application/json'
-                return {'id': shipmentid, 'status': 'published'}
-            else:
-                #response.status = r.status_code
-                #response.content_type = 'application/json'
-                status_note('unknown recipient')
+            return r.status_code
         except Exception as exc:
             raise
 

@@ -162,11 +162,33 @@ def shipment_get_dl_file(shipmentid):
 @app.route('/api/v1/shipment/<shipmentid>/publishment', method='PUT')
 def shipment_put_publishment(shipmentid):
     try:
-        #! once published, cant delete
+        #! once published, cannot delete in most repos
         global REPO_TARGET
         global REPO_TOKEN
         current_depot = db_find_depotid_from_shipment(shipmentid)
-        REPO_TARGET.publish(current_depot, REPO_TOKEN)
+        # get a return of the response of the publish request from the corresponding repo class
+        a = REPO_TARGET.publish(current_depot, REPO_TOKEN)
+        if not a:
+            status_note('! error, failed to call publish', d=is_debug)
+            response.status = 500
+            response.content_type = 'application/json'
+            r = {'id': shipmentid, 'status': 'error'}
+            return json.dumps(r)
+        else:
+            if a == 200 or a == 202:  # note that some repos will return a 202 CREATED
+                r = {'id': shipmentid, 'status': 'published'}
+                # update shipment data in database
+                data = db['shipments'].find_one({'id': shipmentid})
+                if data is not None:
+                    if 'status' in data:
+                        data['status'] = 'published'
+                        db['shipments'].update_one({'_id': data['_id']}, {'$set': data}, upsert=True)
+                        status_note(['updated shipment object ', xstr(data['_id'])], d=is_debug)
+            else:
+                r = {'id': shipmentid, 'status': 'error'}
+            response.status = 200
+            response.content_type = 'application/json'
+            return json.dumps(r)
     except:
         raise
 
@@ -251,7 +273,7 @@ def shipment_post_new():
             status = 200
             if data['recipient'] not in REPO_LIST_availables_as_IDstr:
                 # that recipient is not available, hence cancel new shipment
-                status_note("! error: recipient not available in configured repos", d=False)
+                status_note("! error: recipient not available in configured repos", d=is_debug)
                 data['status'] = 'error'
                 status = 400
             else:
@@ -502,7 +524,7 @@ def db_fill_repo_target_and_list(shipmentid):
                         try:
                             REPO_TOKEN = TOKEN_LIST[repo.get_id()]
                         except:
-                            status_note([' ! missing token for', repo.get_id()])
+                            status_note([' ! missing token for', repo.get_id()], d=is_debug)
             else:
                 status_note(' ! no recipient specified in db dataset', d=is_debug)
         else:
