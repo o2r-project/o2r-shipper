@@ -59,6 +59,7 @@ def shipment_get_one(name):
         response.content_type = 'application/json'
         if '_id' in data:
             data.pop('_id', None)
+            data.pop('dl_filepath', None)
         return json.dumps(data)
     else:
         status_note(['user requested non-existing shipment ', name], d=is_debug)
@@ -161,11 +162,33 @@ def shipment_get_dl_file(shipmentid):
 @app.route('/api/v1/shipment/<shipmentid>/publishment', method='PUT')
 def shipment_put_publishment(shipmentid):
     try:
+        #! once published, cannot delete in most repos
         global REPO_TARGET
         global REPO_TOKEN
-        #! once published, cant delete
-        #todo make this function in repo and call here
-        REPO_TARGET.publish(REPO_TOKEN)
+        current_depot = db_find_depotid_from_shipment(shipmentid)
+        # get a return of the response of the publish request from the corresponding repo class
+        a = REPO_TARGET.publish(current_depot, REPO_TOKEN)
+        if not a:
+            status_note('! error, failed to call publish', d=is_debug)
+            response.status = 500
+            response.content_type = 'application/json'
+            r = {'id': shipmentid, 'status': 'error'}
+            return json.dumps(r)
+        else:
+            if a == 200 or a == 202:  # note that some repos will return a 202 CREATED
+                r = {'id': shipmentid, 'status': 'published'}
+                # update shipment data in database
+                data = db['shipments'].find_one({'id': shipmentid})
+                if data is not None:
+                    if 'status' in data:
+                        data['status'] = 'published'
+                        db['shipments'].update_one({'_id': data['_id']}, {'$set': data}, upsert=True)
+                        status_note(['updated shipment object ', xstr(data['_id'])], d=is_debug)
+            else:
+                r = {'id': shipmentid, 'status': 'error'}
+            response.status = 200
+            response.content_type = 'application/json'
+            return json.dumps(r)
     except:
         raise
 
@@ -179,7 +202,6 @@ def shipment_get_publishment(shipmentid):
         current_depot = db_find_depotid_from_shipment(shipmentid)
         db_fill_repo_target_and_list(shipmentid)
         REPO_TARGET.get_list_of_files_from_depot(current_depot, REPO_TOKEN)
-        REPO_TARGET.publish(shipmentid, REPO_TOKEN)
     except:
         raise
 
@@ -251,7 +273,7 @@ def shipment_post_new():
             status = 200
             if data['recipient'] not in REPO_LIST_availables_as_IDstr:
                 # that recipient is not available, hence cancel new shipment
-                status_note("! error: recipient not available in configured repos", d=False)
+                status_note("! error: recipient not available in configured repos", d=is_debug)
                 data['status'] = 'error'
                 status = 400
             else:
@@ -352,7 +374,6 @@ def shipment_post_new():
                                     if hasattr(REPO_TARGET, 'get_dl'):
                                         data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
                                         status_note('started download stream...', d=False)
-
                                         data['status'] = 'shipped'
                                         db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
                                                                 upsert=True)
@@ -503,7 +524,7 @@ def db_fill_repo_target_and_list(shipmentid):
                         try:
                             REPO_TOKEN = TOKEN_LIST[repo.get_id()]
                         except:
-                            status_note([' ! missing token for', repo.get_id()])
+                            status_note([' ! missing token for', repo.get_id()], d=is_debug)
             else:
                 status_note(' ! no recipient specified in db dataset', d=is_debug)
         else:

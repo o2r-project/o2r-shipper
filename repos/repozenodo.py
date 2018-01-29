@@ -134,22 +134,14 @@ class RepoClassZenodo(Repo):
             # raise
             status_note(['! failed to submit metadata: ', xstr(exc.args[0])])
 
-    def publish(self, shipmentid, token):
+    def publish(self, current_depot, token):
         try:
-            current_depot = db_find_depotid_from_shipment(shipmentid)
+            current_depot = current_depot
             headers = {'Authorization': ''.join(('Bearer ', token))}
             r = requests.post(''.join((self.HOST, '/deposit/depositions/', current_depot, '/actions/publish')), headers=headers)
             status_note([xstr(r.status_code), ' ', xstr(r.reason)])
-            if r.status_code == 202:
-                db.shipments.update_one({'id': shipmentid}, {'$set': {'status': 'published'}}, upsert=True)
-                if 'doi_url' in r.json():
-                    db.shipments.update_one({'id': shipmentid}, {'$set': {'doi_url': r.json()['doi_url']}}, upsert=True)
-                response.status = r.status_code
-                response.content_type = 'application/json'
-                return {'id': shipmentid, 'status': 'published'}
-            else:
-                status_note('unknown recipient')
-        except:
+            return r.status_code
+        except Exception as exc:
             raise
 
     def create_empty_depot(self, deposition_id, token):
