@@ -60,7 +60,7 @@ Configuration is based on environment variables as shown in the table below. The
 `SHIPPER_REPO_TOKENS` | `repository_tokens` | IDs and API tokens for the repositories
 `SHIPPER_BASE_PATH` | `base_path` | base path of target compendium
 `SHIPPER_MAX_DIR_SIZE` | `max_size_mb` | dir size limit for transmission
-`SHIPPER_SECRET` | `session_secret` | session secret for the o2r platform
+`SHIPPER_SECRET` | `session_secret` | session secret used by the o2r microservices
 `SHIPPER_USERLEVEL_MIN` | `userlevel_min` | user level needed to do shipments
 
 ---
