@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-    Copyright (c) 2016, 2017 - o2r project
+    Copyright (c) 2016-2018 - o2r project
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -124,6 +124,7 @@ def shipment_get_file_id(shipmentid):
             return {'error': 'no files object in repository response'}
     except:
         raise
+
 
 @app.route('/api/v1/shipment/<shipmentid>/dl', method='GET')
 def shipment_get_dl_file(shipmentid):
@@ -257,7 +258,8 @@ def shipment_post_new():
                     new_md = ast.literal_eval(new_md)
                 except:
                     new_md = {}
-            data = {'id': str(new_id),
+            # shipment_data is the administrative metadata about the current shipment for the shipments collection in DB
+            shipment_data = {'id': str(new_id),
                     'compendium_id': request.forms.get('compendium_id'),
                     'deposition_id': request.forms.get('deposition_id'),
                     'deposition_url': request.forms.get('deposition_url'),
@@ -268,40 +270,50 @@ def shipment_post_new():
                     'status': 'to be shipped',
                     'md': new_md
                     }
-            current_mongo_doc = db.shipments.insert_one(data)
-            status_note(['created shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
+            # compendium_data is the administrative metadata about the current compendium in the compendia collection in DB
+            compendium_data = {}
+            this_compendium_mongo_doc_id = ''
+            try:
+                compendium_data = db['compendia'].find_one({'id': shipment_data['compendium_id']})
+                # make mongo db _id referencable
+                this_compendium_mongo_doc_id = compendium_data.get('_id')
+            except errors.PyMongoError:
+                status_note(['! error: no compendium data for <', shipment_data['compendium_id'], '>'], d=is_debug)
+            # create object for administrative metadata in the shipment collection in DB
+            this_shipment_mongo_doc = db.shipments.insert_one(shipment_data)
+            status_note(['created shipment object ', xstr(this_shipment_mongo_doc.inserted_id)], d=is_debug)
             status = 200
-            if data['recipient'] not in REPO_LIST_availables_as_IDstr:
+            if shipment_data['recipient'] not in REPO_LIST_availables_as_IDstr:
                 # that recipient is not available, hence cancel new shipment
                 status_note("! error: recipient not available in configured repos", d=is_debug)
-                data['status'] = 'error'
+                shipment_data['status'] = 'error'
                 status = 400
             else:
-                # set REPO TARGET object from REPO LIST:
+                # Set REPO TARGET object from REPO LIST:
                 global REPO_TARGET
                 global REPO_TOKEN
+                # Refresh recipients and make the lists available:
                 db_fill_repo_target_and_list(str(new_id))
-                if data['deposition_id'] is None or data['deposition_id'] == {}:
-                    # no depot yet, go create one
-                    current_compendium = db['compendia'].find_one({'id': data['compendium_id']})
-                    if current_compendium is None:
+                if shipment_data['deposition_id'] is None or shipment_data['deposition_id'] == {}:
+                    # No depot yet, go create one
+                    if compendium_data is None:
                         status_note('! Invalid compendium id', d=is_debug)
-                        data['status'] = 'error'
+                        shipment_data['status'] = 'error'
                         status = 400
                     else:
-                        # check if candidate
-                        if 'candidate' not in current_compendium:
+                        # Check if candidate exists
+                        if 'candidate' not in compendium_data:
                             status_note('no <candidate> element in db doc for that compendium', d=is_debug)
-                            data['status'] = 'error'
+                            shipment_data['status'] = 'error'
                             status = 403
                         else:
-                            if current_compendium['candidate'] is True:
+                            if compendium_data['candidate'] is True:
                                 status_note('ERC candidate may not be shipped.')
-                                data['status'] = 'error'
+                                shipment_data['status'] = 'error'
                                 status = 403
                             else:
                                 # Aquire path to files via env var and id:
-                                compendium_files = os.path.normpath(os.path.join(env_compendium_files, data['compendium_id']))
+                                compendium_files = os.path.normpath(os.path.join(env_compendium_files, shipment_data['compendium_id']))
                                 # Determine state of that compendium: Is is a bag or not, zipped, valid, etc:
                                 compendium_state = files_scan_path(compendium_files)
                                 if not compendium_state == 0:
@@ -311,18 +323,19 @@ def shipment_post_new():
                                         try:
                                             bag = bagit.Bag(compendium_files)
                                             bag.validate()
-                                            status_note(['valid bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
+                                            status_note(['valid bagit bag at <', str(shipment_data['compendium_id']), '>'], d=is_debug)
                                         except bagit.BagValidationError as e:
-                                            status_note(['! invalid bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
+                                            status_note(['! invalid bagit bag at <', str(shipment_data['compendium_id']), '>'], d=is_debug)
                                             details = []
                                             for d in e.details:
                                                 details.append(str(d))
                                                 status_note(xstr(d))
                                             # Exit point for invalid not to be repaired bags
-                                            if not strtobool(data['update_packaging']):
-                                                data['status'] = 'error'
+                                            if not strtobool(shipment_data['update_packaging']):
+                                                shipment_data['status'] = 'error'
+                                                compendium_data['bag'] = False
                                                 # update shipment data in database
-                                                db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                                db.shipments.update_one({'_id': this_shipment_mongo_doc.inserted_id}, {'$set': shipment_data}, upsert=True)
                                                 response.status = 400
                                                 response.content_type = 'application/json'
                                                 return json.dumps({'error': str(details)})
@@ -335,12 +348,13 @@ def shipment_post_new():
                                                     # Validate a second time to ensure successful update:
                                                     try:
                                                         bag.validate()
-                                                        status_note(['Valid updated bagit bag at <', str(data['compendium_id']), '>'], d=is_debug)
+                                                        status_note(['Valid updated bagit bag at <', str(shipment_data['compendium_id']), '>'], d=is_debug)
                                                     except bagit.BagValidationError:
                                                         status_note('! error while validating updated bag')
-                                                        data['status'] = 'error'
+                                                        shipment_data['status'] = 'error'
+                                                        compendium_data['bag'] = False
                                                         # update shipment data in database
-                                                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                                        db.shipments.update_one({'_id': this_shipment_mongo_doc.inserted_id}, {'$set': shipment_data}, upsert=True)
                                                         response.status = 400
                                                         response.content_type = 'application/json'
                                                         return json.dumps({'error': 'unable to validate updated bag'})
@@ -357,27 +371,32 @@ def shipment_post_new():
                                     #elif compendium_state == 3: # would be dealing with zip files...
                                 else:
                                     status_note(['! error, invalid path to compendium: ', compendium_files], d=is_debug)
-                                    data['status'] = 'error'
-                                    # update shipment data in database
-                                    db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                    shipment_data['status'] = 'error'
+                                    compendium_data['bag'] = False
+                                    # Update shipment data in database
+                                    db.shipments.update_one({'_id': this_shipment_mongo_doc.inserted_id}, {'$set': shipment_data}, upsert=True)
                                     response.status = 400
                                     response.content_type = 'application/json'
                                     return json.dumps({'error': 'invalid path to compendium'})
                                 # Continue with zipping and upload
-                                # update shipment data in database
-                                db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
-                                status_note(['updated shipment object ', xstr(current_mongo_doc.inserted_id)], d=is_debug)
+                                compendium_data['bag'] = True
+                                compendium_data['compendium'] = True
+                                # update compendium data in DB
+                                db.compendia.update_one({'_id': this_compendium_mongo_doc_id}, {'$set': compendium_data}, upsert=True)
+                                # update shipment data in DB
+                                db.shipments.update_one({'_id': this_shipment_mongo_doc.inserted_id}, {'$set': shipment_data}, upsert=True)
+                                status_note(['updated shipment object ', xstr(this_shipment_mongo_doc.inserted_id)], d=is_debug)
                                 # Ship to the selected repository
-                                file_name = '.'.join((str(data['compendium_id']), 'zip'))
+                                file_name = '.'.join((str(shipment_data['compendium_id']), 'zip'))
                                 if not hasattr(REPO_TARGET, 'create_depot'):
                                     # fetch DL link if available
                                     if hasattr(REPO_TARGET, 'get_dl'):
-                                        data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
+                                        shipment_data['dl_filepath'] = REPO_TARGET.get_dl(file_name, compendium_files)
                                         status_note('started download stream...', d=False)
-                                        data['status'] = 'shipped'
-                                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
+                                        shipment_data['status'] = 'shipped'
+                                        db.shipments.update_one({'_id': this_shipment_mongo_doc.inserted_id}, {'$set': shipment_data},
                                                                 upsert=True)
-                                        return shipment_get_dl_file(data['id'])
+                                        return shipment_get_dl_file(shipment_data['id'])
                                     else:
                                         status_note('! error, the selected recipient repo class has no method to create a new depot', d=is_debug)
                                         response.status = 500
@@ -385,34 +404,34 @@ def shipment_post_new():
                                         return json.dumps(
                                             {'error': 'recipient repo class misses a method to create a new file depot'})
                                 else:
-                                    data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
+                                    # the selected repo class does have a function 'create_depot', now use it:
+                                    shipment_data['deposition_id'] = REPO_TARGET.create_depot(REPO_TOKEN)
                                     # zip all files in dir and submit as zip:
-                                    REPO_TARGET.add_zip_to_depot(data['deposition_id'], file_name, compendium_files, REPO_TOKEN, env_max_dir_size_mb)
+                                    REPO_TARGET.add_zip_to_depot(shipment_data['deposition_id'], file_name, compendium_files, REPO_TOKEN, env_max_dir_size_mb)
                                     # Add metadata that are in compendium in db:
-                                    if 'metadata' in current_compendium and 'deposition_id' in data:
-                                        REPO_TARGET.add_metadata(data['deposition_id'], current_compendium['metadata'], REPO_TOKEN)
-                                        data['status'] = 'shipped'
-                                        db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data},
-                                                            upsert=True)
-                # update shipment data in database
-                db.shipments.update_one({'_id': current_mongo_doc.inserted_id}, {'$set': data}, upsert=True)
+                                    if 'metadata' in compendium_data and 'deposition_id' in shipment_data:
+                                        REPO_TARGET.add_metadata(shipment_data['deposition_id'], compendium_data['metadata'], REPO_TOKEN)
+                                        shipment_data['status'] = 'shipped'
+                # shipment is complete, update administrative metadata for shipment and compendium in DB one last time
+                db.shipments.update_one({'_id': this_shipment_mongo_doc.inserted_id}, {'$set': shipment_data}, upsert=True)
+                db.compendia.update_one({'_id': this_compendium_mongo_doc_id}, {'$set': compendium_data}, upsert=True)
             # build and send response
             response.status = status
             response.content_type = 'application/json'
             # preview object for logger:
-            d = {'id': data['id'],
-                 'recipient': data['recipient'],
-                 'deposition_id': data['deposition_id'],
-                 'status': data['status']
+            d = {'id': shipment_data['id'],
+                 'recipient': shipment_data['recipient'],
+                 'deposition_id': shipment_data['deposition_id'],
+                 'status': shipment_data['status']
                  }
             return json.dumps(d)
         else:
             response.status = 403
             response.content_type = 'application/json'
             return json.dumps({'error': 'insufficient permissions (not logged in?)'})
-    except requests.exceptions.RequestException as exc:
+    except requests.exceptions.RequestException as rexc:
         raise
-        status_note(['! error: ', xstr(exc)], d=is_debug)
+        status_note(['! error: ', xstr(rexc)], d=is_debug)
         response.status = 400
         response.content_type = 'application/json'
         return json.dumps({'error': 'bad request'})
