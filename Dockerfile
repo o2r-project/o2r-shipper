@@ -38,7 +38,7 @@ ARG BUILD_DATE
 # Metadata http://label-schema.org/rc1/
 LABEL maintainer="o2r-project <https://o2r.info>" \
     org.label-schema.vendor="o2r project" \
-    org.label-schema.url="http://o2r.info" \
+    org.label-schema.url="https://o2r.info" \
     org.label-schema.name="o2r shipper" \
     org.label-schema.description="ERC shipping to repositories" \    
     org.label-schema.vcs-url=$VCS_URL \

@@ -39,13 +39,12 @@ Example:
     docker build . -t o2r-shipper
     docker run --rm -v $(pwd)/o2r-shipper -t {ACCESS_TOKENS}
 
-## 2. Endpoint at o2r web API:
+## 2. Endpoint at o2r API
 
 Please refer to the documentation available at:
 
-+ [o2r-web-api](http://o2r.info/o2r-web-api/shipment/)
++ [o2r API](https://o2r.info/api/shipment/)
 + [[dev] o2r-web-api shipments](https://github.com/o2r-project/o2r-web-api/blob/master/docs/shipment.md)
-
 
 ## 3. Configuration
 
@@ -71,7 +70,6 @@ Configuration is based on environment variables as shown in the table below. The
 At shipping, the shipper attempts to validate the target files as valid bagit bags, using the LoC bagit.py module. If no bagit bag is found, it is created.
 An invalid or bag will be updated. The shipper is designed to transport only valid bags to its recipients.
 
-
 ## Shipment recipients ("Repos")
 
 New repositories that serve as shipping destinations can be added to the `/repo` folder of the shipper. They wrap the API of the target repository. Their filename must start with `repo` and their class name must start with `RepoClass` in order to be recognized. Moreover each repo provides an ID, a LABEL and a HOST in its configuration as well as functions to return these values. They inherit necessary imports from the master `repoclass` module found in the same folder. 
@@ -95,7 +93,6 @@ _IDs_ `zenodo_sandbox`, `zenodo`
 
 To ship ERC to [Zenodo](https://zenodo.org) (or the [Zenodo Sandbox](https://sandbox.zenodo.org)), you must create an account and log in.
 Then go to your account _Settings_, open the _Applications_ settings and add a new _Personal access token_ including the scopes `deposit:write` and `deposit:actions`.
-
 
 ## Testing
 
