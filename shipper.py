@@ -516,7 +516,7 @@ def session_get_user(cookie, my_db):
         return None
 
 def addDataPath(path):
-    return('data/' +path)
+    return(os.path.join('data', path))
 
 
 
