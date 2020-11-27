@@ -365,6 +365,12 @@ def shipment_post_new():
                                         try:
                                             bag = bagit.make_bag(compendium_files)
                                             bag.save()
+                                            compendium_data['metadata']["o2r"]['codefiles'] = list(map(addDataPath, compendium_data['metadata']["o2r"]['codefiles']))
+                                            compendium_data['metadata']["o2r"]['inputfiles'] = list(map(addDataPath, compendium_data['metadata']["o2r"]['inputfiles']))
+                                            compendium_data['metadata']["o2r"]['mainfile_candidates'] = list(map(addDataPath, compendium_data['metadata']["o2r"]['mainfile_candidates']))
+                                            compendium_data['metadata']["o2r"]['displayfile_candidates'] = list(map(addDataPath, compendium_data['metadata']["o2r"]['displayfile_candidates']))
+                                            compendium_data['metadata']["o2r"]['mainfile'] = addDataPath(compendium_data['metadata']["o2r"]["mainfile"])
+                                            compendium_data['metadata']["o2r"]['displayfile'] = addDataPath(compendium_data['metadata']["o2r"]["displayfile"])
                                             status_note('New bagit bag written')
                                         except Exception as e:
                                             status_note(['! error while bagging: ', xstr(e)], d=is_debug)
@@ -381,6 +387,8 @@ def shipment_post_new():
                                 # Continue with zipping and upload
                                 compendium_data['bag'] = True
                                 compendium_data['compendium'] = True
+
+                                
                                 # update compendium data in DB
                                 db.compendia.update_one({'_id': this_compendium_mongo_doc_id}, {'$set': compendium_data}, upsert=True)
                                 # update shipment data in DB
@@ -506,6 +514,10 @@ def session_get_user(cookie, my_db):
             status_note(['! error: ', str(exc.args[0])])
     else:
         return None
+
+def addDataPath(path):
+    return(os.path.join('data', path))
+
 
 
 def session_user_entitled(cookie, min_lvl):
