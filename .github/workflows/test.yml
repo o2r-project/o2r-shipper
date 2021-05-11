@@ -1,0 +1,88 @@
+
+name: Test 
+
+on: 
+  push:
+    branches: 
+      - master
+  pull_request: 
+
+  workflow_dispatch:
+  
+
+
+jobs: 
+  test:
+    runs-on: ubuntu-20.04 
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: pip installs
+        run: pip install -U pytest requests
+
+      - name: Make temp directory 
+        run: mkdir /tmp/o2r
+
+      # Setup docker containers for testing
+      - name: Set up MongoDB
+        run: docker run --name mongodb -d -p 27017:27017 mongo:3.4
+
+      - name: Set up testloader
+        run: >-
+          docker run 
+          --name testloader  -d 
+          -p 8088:8088 
+          --link mongodb:mongodb 
+          -v /tmp/o2r:/tmp/o2r 
+          -v /var/run/docker.sock:/var/run/docker.sock 
+          -e LOADER_MONGODB=mongodb://mongodb:27017  
+          -e DEBUG=* 
+          o2rproject/o2r-loader:latest 
+
+      - name: Set up testmuncher
+        run: >-
+          docker run
+          --name testmuncher -d 
+          -p 8080:8080 
+          --link mongodb:mongodb 
+          -v /tmp/o2r:/tmp/o2r 
+          -v /var/run/docker.sock:/var/run/docker.sock 
+          -e MUNCHER_MONGODB=mongodb://mongodb:27017 
+          -e DEBUG=muncher,muncher:* 
+          o2rproject/o2r-muncher:latest
+        
+      - name: Build shipper
+        run: docker build --tag shipper .
+
+      - name: Set up testshipper
+        run: >-
+          docker run 
+          --name testshipper -t -d 
+          -p 8087:8087 
+          --link mongodb:mongodb 
+          -v /tmp/o2r:/tmp/o2r 
+          -e SHIPPER_REPO_TOKENS='{"download": "none"}' 
+          -e SHIPPER_BOTTLE_HOST=0.0.0.0 
+          -e SHIPPER_MONGODB=mongodb://mongodb:27017/ 
+          shipper
+
+      - name: Run pytest
+        run: |
+          sleep 10
+          pytest
+
+      - name: Logs in case of failure 
+        if: ${{ failure() }} 
+        run: |
+          docker logs testloader
+          docker logs testmuncher
+          docker logs testshipper
+            
