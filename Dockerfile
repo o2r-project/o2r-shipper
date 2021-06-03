@@ -18,7 +18,7 @@ RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" > /etc/apk/reposito
     && echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories \
     && echo "http://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories
 
-RUN apk add --no-cache gcc musl-dev dumb-init
+RUN apk add --no-cache g++ gcc musl-dev dumb-init
 
 WORKDIR /shipper
 COPY repos repos

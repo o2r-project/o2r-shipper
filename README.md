@@ -124,4 +124,4 @@ docker rm -f testdb testshipper
 
 ### Online integration tests
 
-The steps of the manual tests also provide the structure for automated tests, see `.travis.yml`.
+The steps of the manual tests also provide the structure for automated tests, see `.github/workflows/test.yml`.
