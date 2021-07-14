@@ -1,6 +1,6 @@
 bagit
 bottle
-gevent==1.2.2
+gevent
 pymongo
 requests
 zipstream
